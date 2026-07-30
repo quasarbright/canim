@@ -93,6 +93,13 @@ class Language:
     def closers(self) -> dict[str, str]:
         return {v: k for k, v in self.delimiters.items()}
 
+    def __deepcopy__(self, memo):
+        # A language is an immutable value shared by every block. Copying a Code
+        # deep-copies its attributes, and duplicating the keyword sets and
+        # compiled patterns per clone is both wasteful and surprising — two
+        # blocks of the same language should report the same language.
+        return self
+
 
 def lex(source: str, language: Language) -> list[Token]:
     """Split ``source`` into tokens and resolve delimiter partners."""

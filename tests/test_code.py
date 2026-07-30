@@ -154,3 +154,19 @@ def test_clone_keeps_its_own_tokens():
     twin = code.clone()
     assert [t.text for t in twin.tokens] == [t.text for t in code.tokens]
     assert twin.tokens is not code.tokens
+
+
+def test_clone_preserves_transforms_applied_after_construction():
+    # A clone rebuilt from the constructor arguments came back at full size and
+    # sat on top of the scaled original, doubled.
+    code = Code("(f x)").scale(0.78).shift([1.5, -0.5, 0])
+    twin = code.clone()
+    assert abs(twin.width - code.width) < 1e-9
+    assert (twin.get_center() == code.get_center()).all()
+
+
+def test_clone_addresses_its_own_glyphs():
+    code = Code("(f x)").scale(0.5)
+    twin = code.clone()
+    assert twin.group(twin.nth("f"))[0] is not code.group(code.nth("f"))[0]
+    assert twin.text is twin.submobjects[0]

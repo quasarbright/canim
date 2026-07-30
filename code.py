@@ -40,15 +40,6 @@ class Code(VGroup):
         self.source = source
         self.language = resolve(language)
         self.theme = theme or theme_module.DEFAULT
-        # Kept so `clone` can rebuild an identical block rather than trying to
-        # deep-copy one and fix up its token references.
-        self._params = dict(
-            language=language,
-            font=font,
-            font_size=font_size,
-            line_spacing=line_spacing,
-            theme=theme,
-        )
 
         self.tokens: list[Token] = lex(source, self.language)
 
@@ -141,14 +132,16 @@ class Code(VGroup):
         return Selection(self, refs)
 
     def clone(self) -> Code:
-        """A second block with the same code, styling and position.
+        """A second block identical to this one, transforms included.
 
         The peel-off: add both, then transform one while the other stays put,
         and the copy reads as having lifted off the original.
+
+        A copy rather than a rebuild from the constructor arguments — a rebuilt
+        block loses anything applied afterwards, so a scaled block cloned itself
+        back to full size and sat on top of the original, doubled.
         """
-        twin = Code(self.source, **self._params)
-        twin.move_to(self)
-        return twin
+        return self.copy()
 
     def token_group(self, index: int) -> VGroup:
         token = self.tokens[index]

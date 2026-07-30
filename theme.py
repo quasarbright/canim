@@ -21,6 +21,10 @@ class Theme:
     def color(self, kind: Kind) -> str:
         return self.colors[kind]
 
+    def __deepcopy__(self, memo):
+        # Immutable and shared by every block; see Language.__deepcopy__.
+        return self
+
 
 ONE_DARK = Theme(
     name="one-dark",
