@@ -74,9 +74,9 @@ PYTHON = Language(
     ),
     literals=frozenset({"None", "True", "False", "Ellipsis"}),
     delimiters={"(": ")", "[": "]", "{": "}"},
-    # Longest first: -> before -, ** before *, == before =.
+    # Longest first: -> before -, ** before *, >> before >.
     operators=(
-        "->", "==", "!=", "<=", ">=", "//", "**", ":=",
+        "->", "==", "!=", "<=", ">=", "//", "**", ":=", "<<", ">>",
         "=", "+", "-", "*", "/", "<", ">", "%", "|", "&", "^", "~", "@",
     ),
     punctuation=",:.;",
