@@ -1,6 +1,6 @@
 """canim — code transformation animations for manim."""
 
-from .code import Code
+from .code import Code, Selection
 from .debug import correspondence_labels, correspondence_view, debug_block
 from .languages import LISP, PYTHON
 from .lexer import Kind, Token, lex
@@ -12,6 +12,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "Code",
+    "Selection",
     "correspondence_labels",
     "correspondence_view",
     "debug_block",

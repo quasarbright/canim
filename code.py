@@ -21,7 +21,7 @@ from .lexer import Language, Token, lex
 from .refs import TokenRef, _nth, find_runs
 from .theme import Theme
 
-TokenLike = int | Token | TokenRef
+TokenLike = str | int | Token | TokenRef
 Refs = TokenLike | Iterable[TokenLike]
 
 
@@ -40,6 +40,15 @@ class Code(VGroup):
         self.source = source
         self.language = resolve(language)
         self.theme = theme or theme_module.DEFAULT
+        # Kept so `clone` can rebuild an identical block rather than trying to
+        # deep-copy one and fix up its token references.
+        self._params = dict(
+            language=language,
+            font=font,
+            font_size=font_size,
+            line_spacing=line_spacing,
+            theme=theme,
+        )
 
         self.tokens: list[Token] = lex(source, self.language)
 
@@ -68,12 +77,19 @@ class Code(VGroup):
     # --- addressing --------------------------------------------------------
 
     def indices(self, refs: Refs) -> tuple[int, ...]:
-        """Normalize anything token-shaped into a sorted tuple of token indices."""
-        if isinstance(refs, (int, Token, TokenRef)):
+        """Normalize anything token-shaped into a sorted tuple of token indices.
+
+        A bare string means the first occurrence of that token, the same as it
+        does in a mapping entry — so `select("tmp")` and `[["tmp"], ...]` agree
+        about what a string is.
+        """
+        if isinstance(refs, (str, int, Token, TokenRef)):
             refs = [refs]
         out: list[int] = []
         for ref in refs:
-            if isinstance(ref, TokenRef):
+            if isinstance(ref, str):
+                out.extend(self.nth(ref).indices)
+            elif isinstance(ref, TokenRef):
                 out.extend(ref.indices)
             elif isinstance(ref, Token):
                 out.append(ref.index)
@@ -114,6 +130,26 @@ class Code(VGroup):
             )
         return [TokenRef(self, r, f"{pattern}#{i}") for i, r in enumerate(runs)]
 
+    def select(self, refs: Refs) -> Selection:
+        """The tokens those refs name, as something you can animate directly.
+
+        The door to everything per-token. A `Selection` is a `VGroup`, so
+        `sel.animate.set_color(...)` and friends work as they do anywhere else
+        in manim; `sel.runs` and `sel.boxes()` cover the things that need
+        geometry rather than a tween.
+        """
+        return Selection(self, refs)
+
+    def clone(self) -> Code:
+        """A second block with the same code, styling and position.
+
+        The peel-off: add both, then transform one while the other stays put,
+        and the copy reads as having lifted off the original.
+        """
+        twin = Code(self.source, **self._params)
+        twin.move_to(self)
+        return twin
+
     def token_group(self, index: int) -> VGroup:
         token = self.tokens[index]
         return self.text[token.start : token.end]
@@ -128,6 +164,34 @@ class Code(VGroup):
         head = self.source.splitlines()[0] if self.source else ""
         more = "…" if "\n" in self.source else ""
         return f"<Code {self.language.name} {len(self.tokens)} tokens {head!r}{more}>"
+
+
+class Selection(VGroup):
+    """Glyphs for a set of tokens, plus the handles that need geometry."""
+
+    def __init__(self, code: Code, refs: Refs):
+        self.code = code
+        self.indices = code.indices(refs)
+        self.tokens = [code.tokens[i] for i in self.indices]
+        # One VGroup per contiguous run. Disjoint tokens must be boxed
+        # separately — a single box round the whole selection would span
+        # everything in between.
+        self.runs = VGroup(
+            *[code.group(range(a, b + 1)) for a, b in _runs(self.indices)]
+        )
+        super().__init__(*[glyph for run in self.runs for glyph in run])
+
+    def boxes(self, **kwargs) -> VGroup:
+        """A rectangle round each contiguous run."""
+        from manim import SurroundingRectangle
+
+        kwargs.setdefault("buff", 0.05)
+        kwargs.setdefault("stroke_width", 2)
+        return VGroup(*[SurroundingRectangle(run, **kwargs) for run in self.runs])
+
+    def __repr__(self) -> str:
+        texts = " ".join(t.text for t in self.tokens)
+        return f"<Selection {len(self.tokens)} tokens {texts!r}>"
 
 
 def _runs(indices: tuple[int, ...]) -> list[tuple[int, int]]:

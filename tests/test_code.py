@@ -82,3 +82,75 @@ def test_distinct_kinds_get_distinct_colors():
     by_kind = {t.kind: code.group(t)[0].get_color().to_hex().lower() for t in code.tokens}
     assert len(by_kind) >= 7, f"only reached {sorted(k.value for k in by_kind)}"
     assert len(set(by_kind.values())) >= 6
+
+
+# --- select ----------------------------------------------------------------
+
+
+def test_select_is_a_vgroup_of_the_glyphs():
+    code = Code("(let ([tmp a]) tmp)")
+    sel = code.select(code.all("tmp"))
+    assert len(sel) == 6  # two three-character tokens
+    assert [t.text for t in sel.tokens] == ["tmp", "tmp"]
+
+
+def test_select_animates_like_any_vgroup():
+    # The point of Selection being a VGroup: no bespoke tween proxies needed.
+    code = Code("(f tmp)")
+    sel = code.select("tmp")
+    assert hasattr(sel, "animate")
+    assert len(sel) == 3
+
+
+def test_disjoint_tokens_get_one_run_each():
+    # A single box round the whole selection would span everything between
+    # them, which is exactly the mistake the review render caught.
+    code = Code("(let ([tmp a]) tmp)")
+    sel = code.select(code.all("tmp"))
+    assert len(sel.runs) == 2
+    assert len(sel.boxes()) == 2
+
+
+def test_a_contiguous_run_is_one_box():
+    code = Code("(g (h x))")
+    sel = code.select(code.nth("(h x)"))
+    assert len(sel.runs) == 1
+    assert len(sel.boxes()) == 1
+    # ...and it carries the whitespace between its tokens
+    assert len(sel) == len("(h x)")
+
+
+def test_select_accepts_bare_strings_and_refs():
+    code = Code("(f a b)")
+    assert code.select("a").indices == (2,)
+    assert code.select(code.nth("b")).indices == (3,)
+    assert code.select([2, 3]).indices == (2, 3)
+
+
+# --- clone -----------------------------------------------------------------
+
+
+def test_clone_matches_source_styling_and_position():
+    code = Code("(f x)", font_size=31, line_spacing=1.4)
+    twin = code.clone()
+    assert twin.source == code.source
+    assert twin.language is code.language
+    assert twin is not code
+    assert twin.text is not code.text
+    assert abs(twin.width - code.width) < 1e-9
+    assert abs(twin.height - code.height) < 1e-9
+    assert (twin.get_center() == code.get_center()).all()
+
+
+def test_clone_is_independent():
+    code = Code("(f x)")
+    twin = code.clone()
+    twin.shift([1, 0, 0])
+    assert not (twin.get_center() == code.get_center()).all()
+
+
+def test_clone_keeps_its_own_tokens():
+    code = Code("(f x)")
+    twin = code.clone()
+    assert [t.text for t in twin.tokens] == [t.text for t in code.tokens]
+    assert twin.tokens is not code.tokens
