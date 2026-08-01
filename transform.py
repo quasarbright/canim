@@ -75,17 +75,32 @@ class CodeTransform(AnimationGroup):
         # The glyph slices themselves: new VGroups wrapping dest's children, so
         # they aren't caught by dest's family, but leaving them in the scene
         # draws those glyphs twice.
-        for animation in self.animations:
+        for animation in _walk(self.animations):
             # `mobject` covers most of it; `target_mobject` covers Transform;
             # `to_add_on_completion` covers FadeTransform, which puts a third
             # mobject into the scene that neither of the others names.
             for attr in ("mobject", "target_mobject", "to_add_on_completion"):
                 leftover = getattr(animation, attr, None)
                 if leftover is not None:
+                    # By family, not by identity: `FadeTransform` animates a
+                    # `Group(source, target.copy())`, and it is the copy inside
+                    # that group which ends up loose in the scene.
                     stale.add(id(leftover))
+                    stale.update(id(m) for m in leftover.get_family())
         scene.mobjects = [
             m for m in scene.mobjects if id(m) not in stale
         ] + [self.dest]
+
+
+def _walk(animations):
+    """Every animation including the ones nested inside groups.
+
+    A clone wraps its branches in `LaggedStart`, and the leftovers that need
+    cleaning up hang off the individual animations rather than off the group.
+    """
+    for animation in animations:
+        yield animation
+        yield from _walk(getattr(animation, "animations", ()))
 
 
 def _animations(
@@ -133,18 +148,33 @@ def _clone(correspondence, source, dest, *, path_arc, lag) -> list[Animation]:
     whole animation and blinking out at the end — three `a`s on screen for a
     split that should produce two.
 
+    Every destination is reached the way `_morph` picks for the spelling
+    change, so a split into differently-spelled text cross-fades instead of
+    pairing `p` onto `'` down every branch.
+
     Departures are staggered so a split reads as a split rather than as one
     object smearing in several directions.
     """
     src = source.group(correspondence.src[0])
+    before = _text(source, correspondence.src[0])
     first, *rest = correspondence.dst
 
-    parts = [AnimationGroup(*_pair(src, dest.group(first), path_arc=path_arc))]
+    parts = [
+        AnimationGroup(
+            *_morph(
+                src, dest.group(first), before, _text(dest, first), path_arc=path_arc
+            )
+        )
+    ]
     # Safe to read `src` after the line above: Transform.begin copies its
     # target, so the copies capture the original's appearance before anything
     # animates.
     parts += [
-        AnimationGroup(*_pair_from_copy(src, dest.group(group), path_arc=path_arc))
+        AnimationGroup(
+            *_morph_from_copy(
+                src, dest.group(group), before, _text(dest, group), path_arc=path_arc
+            )
+        )
         for group in rest
     ]
 
@@ -156,16 +186,31 @@ def _clone(correspondence, source, dest, *, path_arc, lag) -> list[Animation]:
 def _merge(correspondence, source, dest, *, path_arc) -> list[Animation]:
     """Several groups converging on one.
 
-    The first arrives and stays; the rest travel to the same slot and dissolve
-    into it as they land, so the collapse is visible rather than one of them
-    simply vanishing early.
+    Every group takes the same route: whichever of pairing or cross-fading
+    `_morph` picks for the spelling change. Hard-coding the first to pair and
+    the rest to cross-fade made two copies of the same word arrive by visibly
+    different means — `'paid'` into `paid` paired `'` onto `p` and `p` onto `a`
+    while its twin dissolved cleanly.
+
+    Each group after the first lands on its own copy of the slot, since they
+    would otherwise all animate the same mobject.
     """
     target = dest.group(correspondence.dst[0])
+    after = _text(dest, correspondence.dst[0])
     keep, *rest = correspondence.src
-    animations = _pair(source.group(keep), target, path_arc=path_arc)
+
+    animations = _morph(
+        source.group(keep), target, _text(source, keep), after, path_arc=path_arc
+    )
     for group in rest:
-        animations.append(
-            FadeTransform(source.group(group), target.copy())
+        animations.extend(
+            _morph(
+                source.group(group),
+                target.copy(),
+                _text(source, group),
+                after,
+                path_arc=path_arc,
+            )
         )
     return animations
 
@@ -183,22 +228,39 @@ def _text(code: Code, indices) -> str:
     return "".join(code.tokens[i].text for i in indices)
 
 
-def _morph(src: VGroup, dst: VGroup, before: str, after: str, **kwargs) -> list[Animation]:
-    """One thing becoming different text.
+def _pairable(before: str, after: str) -> bool:
+    """Whether two spellings are close enough to pair glyph by glyph.
 
-    When the two spellings share a real prefix — `tmp` into `tmp_G4271` — pair
-    glyph by glyph so the shared part holds still and the rest grows out of it.
-    When they don't, glyph pairing produces `e`->`a`, `t`->`m` in place, which
-    reads as mush; cross-fade the whole thing instead.
+    `tmp` into `tmp_G4271` shares a real prefix, so the shared part can hold
+    still and the rest grow out of it. `let` into `lambda` shares only `l`, and
+    pairing it would put `e`->`a` and `t`->`m` in place, which reads as mush.
     """
+    if before == after:
+        # Same text: always pair, however short. A one-character token has no
+        # prefix long enough to clear the threshold below.
+        return True
     shared = 0
     for a, b in zip(before, after):
         if a != b:
             break
         shared += 1
-    if shared >= 2 and shared >= 0.4 * min(len(before), len(after)):
+    return shared >= 2 and shared >= 0.4 * min(len(before), len(after))
+
+
+def _morph(src: VGroup, dst: VGroup, before: str, after: str, **kwargs) -> list[Animation]:
+    """One thing becoming different text."""
+    if _pairable(before, after):
         return _pair(src, dst, **kwargs)
     return [FadeTransform(src, dst)]
+
+
+def _morph_from_copy(
+    src: VGroup, dst: VGroup, before: str, after: str, **kwargs
+) -> list[Animation]:
+    """Like `_morph`, but the source stays put and a copy does the travelling."""
+    if _pairable(before, after):
+        return _pair_from_copy(src, dst, **kwargs)
+    return [FadeTransform(src.copy(), dst)]
 
 
 def _pair(src: VGroup, dst: VGroup, **kwargs) -> list[Animation]:

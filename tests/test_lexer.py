@@ -61,6 +61,20 @@ def test_string_is_one_token_and_hides_its_contents():
     assert toks[2].kind is Kind.STRING
 
 
+def test_a_prefix_belongs_to_the_string_it_introduces():
+    # `f` on its own would lex as an identifier and stay colored as code, which
+    # leaves the quote looking like it starts one character late.
+    toks = lex('x = f"a {b} c"', PYTHON)
+    assert [t.text for t in toks] == ["x", "=", 'f"a {b} c"']
+    assert toks[2].kind is Kind.STRING
+    assert texts('rb"a"', PYTHON) == ['rb"a"']
+
+
+def test_a_prefix_letter_is_only_a_prefix_next_to_a_quote():
+    assert texts("format(x)", PYTHON) == ["format", "(", "x", ")"]
+    assert texts("f(x)", PYTHON) == ["f", "(", "x", ")"]
+
+
 def test_escaped_quote_does_not_end_the_string():
     assert texts(r'"a\"b"') == [r'"a\"b"']
 

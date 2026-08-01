@@ -176,19 +176,55 @@ def test_clone_of_a_whole_subexpression():
     assert all(len(g) == 4 for g in clone.dst)
 
 
-def test_merge_keeps_one_and_dissolves_the_rest():
+def test_merging_copies_of_the_same_word_all_travel():
+    # Both `tmp`s are spelled like the destination, so both pair glyph by
+    # glyph. Cross-fading one of them made two identical words arrive by
+    # visibly different means.
     from manim import FadeTransform
 
     src, dst = Code("(f tmp tmp)"), Code("(f tmp)")
     anim = CodeTransform(src, dst, [(src.all("tmp"), ["tmp"])])
+    assert not any(isinstance(a, FadeTransform) for a in _flatten(anim))
+
+
+def test_splitting_into_unlike_words_cross_fades_every_branch():
+    # `paid` into two `'paid'`s shares no usable prefix, so both branches
+    # dissolve. Pairing them would put `p` onto `'` down each one.
+    from manim import FadeTransform
+
+    src, dst = Code("(f paid)"), Code("(f 'paid' 'paid')")
+    anim = CodeTransform(src, dst, [(["paid"], dst.all("'paid'"))])
     flat = _flatten(anim)
-    assert sum(isinstance(a, FadeTransform) for a in flat) == 1
+    assert sum(isinstance(a, FadeTransform) for a in flat) == 2
+
+
+def test_splitting_into_the_same_word_travels_on_every_branch():
+    from manim import FadeTransform
+
+    src, dst = Code("(f tmp)"), Code("(f tmp tmp)")
+    anim = CodeTransform(src, dst, [(["tmp"], dst.all("tmp"))])
+    assert not any(isinstance(a, FadeTransform) for a in _flatten(anim))
+
+
+def test_merging_unlike_words_cross_fades_all_of_them():
+    # `'paid'` into `paid` shares no usable prefix, so every source dissolves.
+    # Pairing the first would map `'` onto `p` and `p` onto `a`.
+    from manim import FadeTransform
+
+    src, dst = Code("(f 'paid' 'paid')"), Code("(f paid)")
+    anim = CodeTransform(src, dst, [(src.all("'paid'"), ["paid"])])
+    flat = _flatten(anim)
+    assert sum(isinstance(a, FadeTransform) for a in flat) == 2
 
 
 def test_clone_and_merge_leave_the_scene_clean():
     for before, after, mapping_for in [
         ("(swap a b)", "(let (t a) (set a b))", lambda s, d: [(["a"], d.all("a"))]),
         ("(f tmp tmp)", "(f tmp)", lambda s, d: [(s.all("tmp"), ["tmp"])]),
+        # Cross-fading branches: each one puts a copy of the target into the
+        # scene, which has to be cleaned up like everything else.
+        ("(f paid)", "(f 'paid' 'paid')", lambda s, d: [(["paid"], d.all("'paid'"))]),
+        ("(f 'paid' 'paid')", "(f paid)", lambda s, d: [(s.all("'paid'"), ["paid"])]),
     ]:
         src, dst = Code(before), Code(after)
         scene = Scene()

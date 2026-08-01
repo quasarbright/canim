@@ -88,6 +88,12 @@ class Language:
     punctuation: str = ""
     line_comment: str | None = None
     string_delims: str = '"'
+    string_prefixes: str = ""
+    """Letters that may sit in front of a quote, as in python's f"…" and rb"…".
+
+    Still a pure function of the token's own text: `f"x"` is spelled like a
+    string, `format` is not.
+    """
 
     @property
     def closers(self) -> dict[str, str]:
@@ -132,6 +138,18 @@ def lex(source: str, language: Language) -> list[Token]:
             emit(source[i:end], Kind.STRING)
             col, i = col + (end - i), end
             continue
+
+        # A prefixed string, before the word rule gets a chance to take the
+        # prefix as an identifier of its own and leave it colored as code.
+        if language.string_prefixes and ch in language.string_prefixes:
+            quote = i
+            while quote < n and source[quote] in language.string_prefixes:
+                quote += 1
+            if quote < n and source[quote] in language.string_delims:
+                end = _string_end(source, quote, source[quote])
+                emit(source[i:end], Kind.STRING)
+                col, i = col + (end - i), end
+                continue
 
         operator = next(
             (op for op in language.operators if source.startswith(op, i)), None

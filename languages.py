@@ -82,6 +82,7 @@ PYTHON = Language(
     punctuation=",:.;",
     line_comment="#",
     string_delims="\"'",
+    string_prefixes="fFrRbBuU",
 )
 
 BY_NAME = {"lisp": LISP, "python": PYTHON}
