@@ -1,6 +1,6 @@
 import pytest
 
-from canim.languages import LISP, PYTHON, resolve
+from canim.languages import JAVASCRIPT, LISP, PYTHON, resolve
 from canim.lexer import Kind, lex
 
 
@@ -22,9 +22,9 @@ def test_punctuation_heavy_identifiers_are_single_tokens():
 
 
 def test_keywords_versus_identifiers():
-    assert kinds("(lambda x)") == [
+    assert kinds("(if x)") == [
         ("(", Kind.DELIMITER),
-        ("lambda", Kind.KEYWORD),
+        ("if", Kind.KEYWORD),
         ("x", Kind.IDENTIFIER),
         (")", Kind.DELIMITER),
     ]
@@ -165,12 +165,73 @@ def test_python_comment_and_string():
     assert [t.kind for t in toks][-2:] == [Kind.STRING, Kind.COMMENT]
 
 
+# --- javascript ------------------------------------------------------------
+
+
+def test_javascript_const():
+    assert texts("const a = 1", JAVASCRIPT) == ["const", "a", "=", "1"]
+    assert kinds("const a = 1", JAVASCRIPT) == [
+        ("const", Kind.KEYWORD),
+        ("a", Kind.IDENTIFIER),
+        ("=", Kind.OPERATOR),
+        ("1", Kind.LITERAL),
+    ]
+
+
+def test_template_literal_is_one_string_token():
+    """The whole backtick literal, `${}` included — the same way an f-string is
+    one token in python. Painting the holes is the scene's job, not the
+    lexer's."""
+    toks = lex("`${a} + ${b}`", JAVASCRIPT)
+    assert [t.text for t in toks] == ["`${a} + ${b}`"]
+    assert toks[0].kind is Kind.STRING
+
+
+def test_template_literal_does_not_swallow_the_rest_of_the_line():
+    assert texts("f(`x`, y)", JAVASCRIPT) == ["f", "(", "`x`", ",", "y", ")"]
+
+
+def test_javascript_longest_operator_wins():
+    assert texts("a === b", JAVASCRIPT) == ["a", "===", "b"]
+    assert texts("a ?? b", JAVASCRIPT) == ["a", "??", "b"]
+    assert texts("x => x", JAVASCRIPT) == ["x", "=>", "x"]
+    assert texts("[...xs]", JAVASCRIPT) == ["[", "...", "xs", "]"]
+
+
+def test_javascript_comment_beats_the_divide_operator():
+    toks = lex("a / b // note\n", JAVASCRIPT)
+    assert [t.text for t in toks] == ["a", "/", "b", "// note"]
+    assert toks[-1].kind is Kind.COMMENT
+
+
+def test_dollar_is_an_identifier_character():
+    assert texts("$el = $(x)", JAVASCRIPT) == ["$el", "=", "$", "(", "x", ")"]
+
+
+def test_javascript_literals_and_builtins():
+    assert kind_of("x = true", "true", JAVASCRIPT) is Kind.LITERAL
+    assert kind_of("x = null", "null", JAVASCRIPT) is Kind.LITERAL
+    assert kind_of("console.log(x)", "console", JAVASCRIPT) is Kind.BUILTIN
+    assert kind_of("console.log(x)", "x", JAVASCRIPT) is Kind.IDENTIFIER
+
+
+def test_javascript_covers_every_character():
+    # No spaces inside the comment or the template: both lex as one token, so
+    # any whitespace they contain is covered but not counted on the right.
+    source = "const f = (x) => `v=${x}`;  //done\n"
+    toks = lex(source, JAVASCRIPT)
+    covered = sum(len(t.text) for t in toks)
+    assert covered == sum(1 for c in source if not c.isspace())
+
+
 # --- resolve ---------------------------------------------------------------
 
 
 def test_resolve_by_name_and_passthrough():
     assert resolve("lisp") is LISP
     assert resolve(LISP) is LISP
+    assert resolve("javascript") is JAVASCRIPT
+    assert resolve("js") is JAVASCRIPT
     with pytest.raises(ValueError, match="unknown language"):
         resolve("brainfuck")
 
@@ -183,13 +244,19 @@ def kind_of(source, text, language=LISP):
 
 
 def test_keyword_and_builtin_come_from_set_membership():
-    assert kind_of("(lambda x)", "lambda") is Kind.KEYWORD
+    assert kind_of("(if x)", "if") is Kind.KEYWORD
+    # `lambda` is a named form you apply, not reserved syntax, so it sits with
+    # `let` and `define` rather than with `if`.
+    assert kind_of("(lambda (x) x)", "lambda") is Kind.BUILTIN
     assert kind_of("(require x)", "require") is Kind.BUILTIN
     assert kind_of("(+ 1 2)", "+") is Kind.BUILTIN
     # The define-family reads as a named form, not a reserved word.
     assert kind_of("(defmacro f ())", "defmacro") is Kind.BUILTIN
     assert kind_of("(define x 1)", "define") is Kind.BUILTIN
     assert kind_of("(let ([x 1]) x)", "let") is Kind.BUILTIN
+    # A macro from the standard library, like `let` — not a special operator,
+    # so not a keyword. `setq` is the special operator it expands into.
+    assert kind_of("(setf x 1)", "setf") is Kind.BUILTIN
 
 
 def test_every_other_identifier_is_plain():
@@ -218,7 +285,7 @@ def test_a_tokens_kind_does_not_depend_on_its_neighbours():
     assert kinds == {Kind.IDENTIFIER}
 
     for source in ("(define lambda 1)", "(lambda)", ") lambda ("):
-        assert kind_of(source, "lambda") is Kind.KEYWORD
+        assert kind_of(source, "lambda") is Kind.BUILTIN
 
 
 def test_python_builtins_are_still_set_lookups():

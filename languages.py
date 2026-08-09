@@ -23,15 +23,18 @@ LISP = Language(
     # named form rather than a reserved word, so it sits with the builtins.
     keywords=frozenset(
         {
-            "lambda", "if", "cond", "case", "else", "when", "unless", "begin",
+            "if", "cond", "case", "else", "when", "unless", "begin",
             "and", "or", "not", "match", "syntax-rules",
-            "quote", "quasiquote", "unquote", "unquote-splicing",
+            "quote",
         }
     ),
     builtins=frozenset(
         {
+            # Named forms you call, like `list` or `let` — not reserved syntax.
+            # Their reader shorthands ` and , are still operators.
+            "quasiquote", "unquote", "unquote-splicing", "lambda",
             "define", "define-syntax", "define-values", "defmacro", "defvar",
-            "let", "let*", "letrec", "let-values", "set!",
+            "let", "let*", "letrec", "let-values", "set!", "setf",
             "require", "provide", "module+", "all-defined-out", "gensym",
             "car", "cdr", "caar", "cadr", "cddr", "cons", "list", "append",
             "map", "filter", "foldl", "foldr", "apply", "length", "reverse",
@@ -85,7 +88,47 @@ PYTHON = Language(
     string_prefixes="fFrRbBuU",
 )
 
-BY_NAME = {"lisp": LISP, "python": PYTHON}
+JAVASCRIPT = Language(
+    name="javascript",
+    word=re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|\d+\.?\d*"),
+    number=re.compile(r"\d+\.?\d*"),
+    keywords=frozenset(
+        {
+            "const", "let", "var", "function", "return", "yield",
+            "if", "else", "for", "while", "do", "break", "continue", "switch",
+            "case", "default", "class", "extends", "new", "delete", "typeof",
+            "instanceof", "in", "of", "this", "super",
+            "import", "export", "from", "as", "async", "await",
+            "try", "catch", "finally", "throw",
+        }
+    ),
+    builtins=frozenset(
+        {
+            "console", "log", "Math", "JSON", "Object", "Array", "String",
+            "Number", "Boolean", "Promise", "Set", "Map", "Symbol", "Error",
+            "parseInt", "parseFloat", "isNaN", "length",
+            "push", "pop", "shift", "map", "filter", "reduce", "forEach",
+            "join", "split", "slice", "concat", "includes", "keys", "values",
+        }
+    ),
+    literals=frozenset({"true", "false", "null", "undefined", "NaN", "Infinity"}),
+    delimiters={"(": ")", "[": "]", "{": "}"},
+    # Longest first, as everywhere: === before ==, ?. before ?, ... before .
+    operators=(
+        "===", "!==", "...", "**=", "&&=", "||=", "??=", ">>>",
+        "==", "!=", "<=", ">=", "=>", "&&", "||", "??", "?.",
+        "++", "--", "+=", "-=", "*=", "/=", "**", "<<", ">>",
+        "=", "+", "-", "*", "/", "<", ">", "%", "!", "&", "|", "^", "~", "?",
+    ),
+    punctuation=",:;.",
+    line_comment="//",
+    # The backtick makes a template literal one string token, the same way a
+    # quote does — so `${a}` arrives as part of the literal and gets painted by
+    # hand, exactly like python's f-string braces.
+    string_delims="\"'`",
+)
+
+BY_NAME = {"lisp": LISP, "python": PYTHON, "javascript": JAVASCRIPT, "js": JAVASCRIPT}
 
 
 def resolve(language: Language | str) -> Language:

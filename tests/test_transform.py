@@ -80,6 +80,25 @@ def test_morph_between_unlike_words_cross_fades():
     assert any(isinstance(a, FadeTransform) for a in anim.animations)
 
 
+def test_morph_that_shares_a_prefix_then_diverges_cross_fades():
+    # `machine_code` -> `machine_ast` agrees for eight characters and then both
+    # sides continue differently. Pairing would put c->a, o->s, d->t in place
+    # and strand the trailing `e`, so a shared prefix alone is not enough.
+    from manim import FadeTransform
+
+    src, dst = Code("(f machine_code)"), Code("(f machine_ast)")
+    anim = CodeTransform(src, dst, [(["machine_code"], ["machine_ast"])])
+    assert any(isinstance(a, FadeTransform) for a in anim.animations)
+
+
+def test_morph_still_pairs_when_one_word_extends_the_other():
+    from manim import FadeTransform
+
+    src, dst = Code("(f set)"), Code("(f set-box!)")
+    anim = CodeTransform(src, dst, [(["set"], ["set-box!"])])
+    assert not any(isinstance(a, FadeTransform) for a in anim.animations)
+
+
 def test_morph_is_flagged_manual():
     src, dst = Code("(let x)"), Code("(lambda x)")
     anim = CodeTransform(src, dst, [(["let"], ["lambda"])])

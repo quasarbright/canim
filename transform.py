@@ -231,20 +231,25 @@ def _text(code: Code, indices) -> str:
 def _pairable(before: str, after: str) -> bool:
     """Whether two spellings are close enough to pair glyph by glyph.
 
-    `tmp` into `tmp_G4271` shares a real prefix, so the shared part can hold
-    still and the rest grow out of it. `let` into `lambda` shares only `l`, and
-    pairing it would put `e`->`a` and `t`->`m` in place, which reads as mush.
+    Only when one spelling is a prefix of the other. `tmp` into `tmp_G4271`
+    holds `tmp` still and grows the rest out of it, and every glyph that pairs
+    lands on the character it already was.
+
+    A long shared prefix is not enough on its own, which is what a proportional
+    threshold here used to allow. `machine_code` into `machine_ast` agrees for
+    eight characters and *then both sides keep going differently*, so pairing
+    puts `c`->`a`, `o`->`s`, `d`->`t` in place and leaves the trailing `e` with
+    no partner, fading out on its own while the rest of the word slides. That
+    is the same mush `let` into `lambda` would give, reached from a longer
+    run-up — and it looks worse, because most of the word travels convincingly
+    first.
     """
-    if before == after:
-        # Same text: always pair, however short. A one-character token has no
-        # prefix long enough to clear the threshold below.
-        return True
     shared = 0
     for a, b in zip(before, after):
         if a != b:
             break
         shared += 1
-    return shared >= 2 and shared >= 0.4 * min(len(before), len(after))
+    return shared == min(len(before), len(after))
 
 
 def _morph(src: VGroup, dst: VGroup, before: str, after: str, **kwargs) -> list[Animation]:
