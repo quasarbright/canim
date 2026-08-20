@@ -1,0 +1,20 @@
+{
+  "name": "TGC green for me",
+  "background": "#022210",
+  "identifier": "#e1f4ea",
+  "keyword": "#f85dcf",
+  "builtin": "#02ca8e",
+  "operator": "#f85dcf",
+  "literal": "#9950f2",
+  "delimiter": "#e1f4ea",
+  "punctuation": "#e1f4ea",
+  "string": "#53f9d8",
+  "comment": "#219152",
+  "chrome_danger": "#ec6565",
+  "chrome_frame": "#052e17",
+  "chrome_frame_stroke": "#266e46",
+  "chrome_muted": "#74be94",
+  "chrome_subtle": "#68b188",
+  "chrome_surface": "#08361c",
+  "chrome_surface_stroke": "#1e623c"
+}

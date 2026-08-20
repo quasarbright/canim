@@ -1,0 +1,20 @@
+{
+  "name": "forest fire",
+  "background": "#3f0303",
+  "identifier": "#f0d8d8",
+  "keyword": "#ff5c5c",
+  "builtin": "#fba52d",
+  "operator": "#ff5c5c",
+  "literal": "#ffff00",
+  "delimiter": "#f0d8d8",
+  "punctuation": "#f0d8d8",
+  "string": "#21b024",
+  "comment": "#b56969",
+  "chrome_danger": "#ff5c5c",
+  "chrome_frame": "#5b0b0b",
+  "chrome_frame_stroke": "#933434",
+  "chrome_muted": "#cd9595",
+  "chrome_subtle": "#bb7c7c",
+  "chrome_surface": "#610f0f",
+  "chrome_surface_stroke": "#882b2b"
+}

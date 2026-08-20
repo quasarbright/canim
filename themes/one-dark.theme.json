@@ -1,0 +1,19 @@
+{
+  "name": "one-dark",
+  "background": "#0e0f16",
+  "identifier": "#abb2bf",
+  "keyword": "#c678dd",
+  "builtin": "#56b6c2",
+  "operator": "#c678dd",
+  "literal": "#d19a66",
+  "delimiter": "#abb2bf",
+  "punctuation": "#abb2bf",
+  "string": "#98c379",
+  "comment": "#5c6370",
+  "chrome_frame": "#141824",
+  "chrome_frame_stroke": "#39405a",
+  "chrome_muted": "#6b7085",
+  "chrome_subtle": "#7f8496",
+  "chrome_surface": "#161a24",
+  "chrome_surface_stroke": "#2e3444"
+}

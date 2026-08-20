@@ -1,0 +1,20 @@
+{
+  "name": "TGC blue for me",
+  "background": "#0f0396",
+  "identifier": "#b6d8fb",
+  "keyword": "#f55cc4",
+  "builtin": "#399af3",
+  "operator": "#f55cc4",
+  "literal": "#f8ce59",
+  "delimiter": "#b6d8fb",
+  "punctuation": "#b6d8fb",
+  "string": "#1aff47",
+  "comment": "#7296c0",
+  "chrome_danger": "#f97ba3",
+  "chrome_frame": "#170b9d",
+  "chrome_frame_stroke": "#4e44c5",
+  "chrome_muted": "#a9a5d5",
+  "chrome_subtle": "#8f8bc3",
+  "chrome_surface": "#1c10a2",
+  "chrome_surface_stroke": "#3f34c1"
+}

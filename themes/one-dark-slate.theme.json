@@ -1,0 +1,15 @@
+{
+  "name": "one-dark-slate",
+  "background": "#22253a",
+  "identifier": "#abb2bf",
+  "keyword": "#c678dd",
+  "builtin": "#56b6c2",
+  "operator": "#c678dd",
+  "literal": "#d19a66",
+  "delimiter": "#abb2bf",
+  "punctuation": "#abb2bf",
+  "string": "#98c379",
+  "comment": "#5c6370",
+  "chrome_muted": "#7d8194",
+  "chrome_subtle": "#9396a5"
+}

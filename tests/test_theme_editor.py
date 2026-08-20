@@ -1,0 +1,103 @@
+"""The two functions in the editor's server that do real work.
+
+The routing is thin enough to read; these are the parts that would be wrong
+without anyone noticing.
+"""
+
+import pytest
+
+from canim import theme
+from canim.theme_editor.server import analyze, segments
+
+
+def a_theme(**overrides):
+    base = {
+        "name": "t",
+        "background": "#101020",
+        "identifier": "#e0e0f0",
+        "keyword": "#ff88cc",
+        "builtin": "#66ddff",
+        "operator": "#ff88cc",
+        "literal": "#ffcc66",
+        "delimiter": "#e0e0f0",
+        "punctuation": "#e0e0f0",
+        "string": "#88ee99",
+        "comment": "#8a8aa8",
+    }
+    return {**base, **overrides}
+
+
+# --- lexing -----------------------------------------------------------------
+
+
+def test_segments_cover_every_character():
+    source = "(let ((x 1))\n  x)"
+    assert "".join(s["text"] for s in segments(source, "lisp")) == source
+
+
+def test_whitespace_carries_no_kind():
+    kinds = {s["kind"] for s in segments("(f x)", "lisp") if s["text"].isspace()}
+    assert kinds == {None}
+
+
+def test_kinds_come_from_the_real_lexer():
+    by_text = {s["text"]: s["kind"] for s in segments("(defmacro f)", "lisp")}
+    assert by_text["defmacro"] == "builtin"
+
+
+# --- analysis ---------------------------------------------------------------
+
+
+def test_faint_text_is_flagged():
+    result = analyze(a_theme(comment="#16161f"))
+    assert any("too faint" in m for m in result["warnings"]["comment"])
+
+
+def test_merely_low_contrast_is_a_softer_flag():
+    result = analyze(a_theme(comment="#6f6f92"))
+    messages = result["warnings"]["comment"]
+    assert any("under 4.5:1" in m for m in messages)
+    assert not any("too faint" in m for m in messages)
+
+
+def test_colliding_roles_are_flagged_on_both_sides():
+    result = analyze(a_theme(keyword="#6ad9fb", operator="#6ad9fb"))
+    assert any("builtin" in m for m in result["warnings"]["keyword"])
+    assert any("keyword" in m for m in result["warnings"]["builtin"])
+
+
+def test_sharing_a_colour_on_purpose_is_not_a_collision():
+    # Operators take the keyword's colour by convention, and delimiters take
+    # the identifier's. Reporting those would flag every theme in the repo.
+    result = analyze(a_theme())
+    assert "operator" not in result["warnings"]
+    assert "delimiter" not in result["warnings"]
+
+
+def test_an_accidental_match_is_still_a_collision():
+    # Only the conventional pairs get a pass. A keyword that happens to equal
+    # the builtin is a real problem, and checking for identical hexes rather
+    # than for the specific pairs would wave it through.
+    result = analyze(a_theme(keyword="#66ddff", operator="#66ddff"))
+    assert "keyword" in result["warnings"]
+
+
+def test_a_clean_theme_has_nothing_to_say():
+    assert analyze(a_theme())["warnings"] == {}
+
+
+def test_chrome_text_is_checked_when_present():
+    result = analyze(a_theme(chrome_muted="#1a1a26"))
+    assert "chrome_muted" in result["warnings"]
+
+
+def test_derived_chrome_is_not_checked():
+    # It is not in the file, so there is nothing to warn about — the value
+    # follows the background by construction.
+    assert "chrome_muted" not in analyze(a_theme())["contrast"]
+
+
+@pytest.mark.parametrize("name", theme.discover())
+def test_every_shipped_theme_can_be_analyzed(name):
+    result = analyze(theme.to_dict(theme.open(name)))
+    assert set(result["contrast"]) >= {"identifier", "keyword", "background"}

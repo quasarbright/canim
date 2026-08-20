@@ -1,0 +1,20 @@
+{
+  "name": "TheGrayCuber Plum",
+  "background": "#420431",
+  "identifier": "#f5cce9",
+  "keyword": "#ee2bba",
+  "builtin": "#f95353",
+  "operator": "#23dec2",
+  "literal": "#f4a152",
+  "delimiter": "#e8c4de",
+  "punctuation": "#e8c4de",
+  "string": "#f4d952",
+  "comment": "#c27085",
+  "chrome_danger": "#f95353",
+  "chrome_frame": "#4d093a",
+  "chrome_frame_stroke": "#872f6f",
+  "chrome_muted": "#c88bb7",
+  "chrome_subtle": "#b672a3",
+  "chrome_surface": "#540c40",
+  "chrome_surface_stroke": "#7c2664"
+}

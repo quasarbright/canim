@@ -10,13 +10,44 @@ Scenes were carrying those as literals, which meant a new theme would leave
 them behind. They live here now. Each one defaults to a value mixed out of the
 background, so a new theme gets chrome that at least belongs to its palette
 without having to name seven more hexes; a theme that cares can pin them.
+
+Pinning is worth it whenever the derivation stops holding a relationship the
+scenes were built against. Mixing toward the foreground works on a near-black
+background and stops working as the background lightens or saturates: on a
+light ground the captions come out too faint to read, and on a saturated one
+the panels wash gray instead of staying in the palette. Both cases want the
+background's own hue lifted by lightness instead, which is what the generators
+in `palette.py` produce.
+
+The palettes themselves are not here. They live one-per-file in `themes/` as
+`.theme.json`, so the editor and the videos read the same bytes — see `open`,
+`save` and `discover` below.
 """
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from .lexer import Kind
+
+THEMES_DIR = Path(__file__).parent / "themes"
+SUFFIX = ".theme.json"
+
+# How far each derivable chrome field sits from the background, toward the
+# identifier color.
+DERIVED_FROM_BACKGROUND = {
+    "surface": 0.06,
+    "surface_stroke": 0.22,
+    "frame": 0.05,
+    "frame_stroke": 0.28,
+    "muted": 0.45,
+    "subtle": 0.55,
+}
+CHROME_FIELDS = (*DERIVED_FROM_BACKGROUND, "danger")
+DEFAULT_DANGER = "#e06c75"
 
 
 def _mix(a: str, b: str, t: float) -> str:
@@ -44,20 +75,22 @@ class Theme:
     frame_stroke: str | None = None
     muted: str | None = None  # captions — quietest readable text
     subtle: str | None = None  # arrows, connectors — structure, not text
-    danger: str = "#e06c75"  # the "no" red; no Kind owns it
+    danger: str | None = None  # the "no" red; no Kind owns it
 
     def __post_init__(self) -> None:
         fg = self.colors[Kind.IDENTIFIER]
-        for name, amount in (
-            ("surface", 0.06),
-            ("surface_stroke", 0.22),
-            ("frame", 0.05),
-            ("frame_stroke", 0.28),
-            ("muted", 0.45),
-            ("subtle", 0.55),
-        ):
+        # Which chrome the theme named for itself, recorded before the rest is
+        # filled in. Afterwards every field holds a color and there is no way
+        # to tell the two apart, which round-tripping a theme through a file
+        # needs to know: a derived field must not be written back as if it had
+        # been chosen.
+        pinned = {f for f in CHROME_FIELDS if getattr(self, f) is not None}
+        object.__setattr__(self, "pinned", frozenset(pinned))
+        for name, amount in DERIVED_FROM_BACKGROUND.items():
             if getattr(self, name) is None:
                 object.__setattr__(self, name, _mix(self.background, fg, amount))
+        if self.danger is None:
+            object.__setattr__(self, "danger", DEFAULT_DANGER)
 
     def color(self, kind: Kind) -> str:
         return self.colors[kind]
@@ -67,77 +100,89 @@ class Theme:
         return self
 
 
-ONE_DARK = Theme(
-    name="one-dark",
-    background="#0e0f16",  # not One Dark's #282c34 — matches the video's palette
-    colors={
-        Kind.IDENTIFIER: "#abb2bf",  # foreground
-        Kind.KEYWORD: "#c678dd",  # purple
-        Kind.BUILTIN: "#56b6c2",  # cyan
-        Kind.LITERAL: "#d19a66",  # orange — numbers, #t, None
-        Kind.STRING: "#98c379",  # green
-        Kind.COMMENT: "#5c6370",
-        # Same pink as keywords. An unquote comma and a `let` are both syntax
-        # doing work, so they read as one category — and it keeps the commas
-        # clearly off the delimiters without adding another hue.
-        Kind.OPERATOR: "#c678dd",
-        Kind.DELIMITER: "#abb2bf",
-        Kind.PUNCTUATION: "#abb2bf",
-    },
-    # Pinned to what the macros scenes were already using, so lifting them out
-    # of that file changed nothing on screen. The derived values are close but
-    # not identical.
-    surface="#161a24",
-    surface_stroke="#2e3444",
-    frame="#141824",
-    frame_stroke="#39405a",
-    muted="#6b7085",
-    subtle="#7f8496",
-)
+def to_dict(theme: Theme) -> dict[str, str]:
+    """A theme as the flat mapping a `.theme.json` file holds.
 
-ONE_DARK_SLATE = Theme(
-    name="one-dark-slate",
-    background="#22253a",  # a lifted slate, rather than One Dark's near-black
-    colors=dict(ONE_DARK.colors),
-    # The surfaces derive correctly here — they come out at the same 1.1:1 and
-    # 1.5:1 lift they have on One Dark's background — but `muted` and `subtle`
-    # do not. Mixing toward the foreground from a background this light lands
-    # captions at 2.6:1 where One Dark has 3.9:1, so those two are pinned to
-    # hold the relationship the scenes were built against.
-    muted="#7d8194",
-    subtle="#9396a5",
-)
+    Flat because a theme is a list of colors and nothing else; nesting the
+    kinds under `colors` bought nothing and made every reader walk a level.
+    Chrome is prefixed rather than nested for the same reason, and only what
+    the theme pinned is written — a derived field left in the file would
+    freeze a value that is supposed to follow the background.
+    """
+    data = {"name": theme.name, "background": theme.background}
+    data.update({kind.value: theme.colors[kind] for kind in Kind})
+    data.update({f"chrome_{f}": getattr(theme, f) for f in sorted(theme.pinned)})
+    return data
 
-VIVID_BLUE = Theme(
-    name="vivid-blue",
-    background="#08004d",
-    colors={
-        Kind.IDENTIFIER: "#c5d8f5",
-        Kind.KEYWORD: "#ee5382",  # rose
-        Kind.BUILTIN: "#2fe5ee",  # aqua
-        Kind.LITERAL: "#f4a65d",  # amber
-        Kind.STRING: "#70ff88",  # green
-        Kind.COMMENT: "#5896b6",
-        Kind.OPERATOR: "#ee5382",  # keyword's rose, same reasoning as One Dark
-        Kind.DELIMITER: "#c5d8f5",
-        Kind.PUNCTUATION: "#c5d8f5",
-    },
-    # All pinned. The derivation mixes toward the foreground, which on a
-    # background this saturated washes the surfaces gray and lands captions at
-    # 3.3:1; these keep the background's own hue and lift by lightness instead.
-    surface="#11085f",
-    surface_stroke="#2c2287",
-    frame="#0d0558",
-    frame_stroke="#352b93",
-    muted="#918bc8",
-    subtle="#7c75b8",
-    danger="#f97ba3",
-)
+
+def _color(data: dict[str, str], key: str) -> str:
+    """One color out of a theme file, checked.
+
+    Worth checking rather than trusting: a three-digit hex or a stray name
+    reaches the color math as a slice of the wrong length and fails several
+    calls later with something like `invalid literal for int()`, which says
+    nothing about which field is wrong.
+    """
+    try:
+        value = data[key]
+    except KeyError:
+        raise ValueError(f"no color for {key!r}") from None
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", str(value)):
+        raise ValueError(f"{key} must be a 6-digit hex color, got {value!r}")
+    return value.lower()
+
+
+def from_dict(data: dict[str, str]) -> Theme:
+    chrome = {
+        f: _color(data, f"chrome_{f}")
+        for f in CHROME_FIELDS
+        if f"chrome_{f}" in data
+    }
+    return Theme(
+        name=str(data.get("name", "untitled")),
+        background=_color(data, "background"),
+        colors={kind: _color(data, kind.value) for kind in Kind},
+        **chrome,
+    )
+
+
+def path_for(name_or_path: str | Path) -> Path:
+    """Where a theme lives. A bare name means one of canim's own."""
+    path = Path(name_or_path)
+    if path.suffix or path.parent != Path("."):
+        return path
+    return THEMES_DIR / f"{name_or_path}{SUFFIX}"
+
+
+def open(name_or_path: str | Path) -> Theme:  # noqa: A001 — the editor calls it Open
+    """Read a theme by name or by path.
+
+    `Path.read_text` rather than the builtin `open`, which this shadows.
+    """
+    return from_dict(json.loads(path_for(name_or_path).read_text()))
+
+
+def save(theme: Theme, name_or_path: str | Path | None = None) -> Path:
+    """Write a theme, defaulting to canim's own directory under its name."""
+    path = path_for(name_or_path if name_or_path is not None else theme.name)
+    if not path.name.endswith(SUFFIX):
+        raise ValueError(f"a theme file must end in {SUFFIX}: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(to_dict(theme), indent=2) + "\n")
+    return path
+
+
+def discover() -> list[str]:
+    """Every theme canim ships, by name."""
+    if not THEMES_DIR.exists():
+        return []
+    return sorted(p.name[: -len(SUFFIX)] for p in THEMES_DIR.glob(f"*{SUFFIX}"))
+
 
 # What a `Code` block gets when nobody says otherwise. A video that wants a
-# different palette sets its own module-level theme and passes it in, rather
-# than reassigning this — see `2026/macros/main.py`.
-DEFAULT = ONE_DARK_SLATE
+# different palette opens its own and passes it in, rather than reassigning
+# this — see `2026/macros/main.py`.
+DEFAULT = open("one-dark-slate")
 
 # Set once here so every scene and every Code block agrees.
 FONT = "Monaco"

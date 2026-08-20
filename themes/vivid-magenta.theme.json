@@ -1,0 +1,20 @@
+{
+  "name": "vivid magenta",
+  "background": "#420431",
+  "identifier": "#f2ebf4",
+  "keyword": "#ff85d2",
+  "builtin": "#66d9ff",
+  "operator": "#ff85d2",
+  "literal": "#ffe066",
+  "delimiter": "#f2ebf4",
+  "punctuation": "#f2ebf4",
+  "string": "#6ff6c4",
+  "comment": "#a872b6",
+  "chrome_danger": "#ff7a91",
+  "chrome_frame": "#4d093a",
+  "chrome_frame_stroke": "#872f6f",
+  "chrome_muted": "#c88bb7",
+  "chrome_subtle": "#b672a3",
+  "chrome_surface": "#540c40",
+  "chrome_surface_stroke": "#7c2664"
+}

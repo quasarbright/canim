@@ -69,10 +69,11 @@ def test_whitespace_glyphs_stay_invisible_after_coloring():
 
 def test_theme_covers_every_token_kind():
     from canim.lexer import Kind
-    from canim.theme import ONE_DARK
+    from canim import theme
 
-    missing = [k for k in Kind if k not in ONE_DARK.colors]
-    assert not missing, f"theme has no color for {missing}"
+    for name in theme.discover():
+        missing = [k for k in Kind if k not in theme.open(name).colors]
+        assert not missing, f"{name} has no color for {missing}"
 
 
 def test_distinct_kinds_get_distinct_colors():

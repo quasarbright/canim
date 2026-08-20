@@ -1,0 +1,20 @@
+{
+  "name": "vivid purple",
+  "background": "#2b0439",
+  "identifier": "#f2ebf4",
+  "keyword": "#ff85d2",
+  "builtin": "#66d9ff",
+  "operator": "#ff85d2",
+  "literal": "#ffe066",
+  "delimiter": "#f2ebf4",
+  "punctuation": "#f2ebf4",
+  "string": "#6ff6c4",
+  "comment": "#a872b6",
+  "chrome_danger": "#ff7a91",
+  "chrome_frame": "#340844",
+  "chrome_frame_stroke": "#6a2d80",
+  "chrome_muted": "#b586c6",
+  "chrome_subtle": "#a16db4",
+  "chrome_surface": "#3a0b4b",
+  "chrome_surface_stroke": "#5f2574"
+}

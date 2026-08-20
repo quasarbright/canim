@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>canim theme editor</title>
+<link rel="stylesheet" href="vendor/katex.min.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="bar">
+  <span class="mark">canim</span>
+  <input id="theme-name" class="name" spellcheck="false" aria-label="Theme name">
+  <span id="dirty" class="dirty" hidden>unsaved</span>
+
+  <div class="group">
+    <button data-act="open">Open</button>
+    <button data-act="save">Save</button>
+    <button data-act="save-as">Save as</button>
+  </div>
+
+  <div class="group">
+    <button data-act="undo" title="Undo — ⌘Z">Undo</button>
+    <button data-act="redo" title="Redo — ⇧⌘Z">Redo</button>
+  </div>
+
+  <div class="group push">
+    <label class="inline">compare
+      <select id="compare-with"><option value="">off</option></select>
+    </label>
+    <div class="segmented" id="compare-mode" hidden>
+      <button data-mode="side" class="on">side by side</button>
+      <button data-mode="toggle">toggle</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <aside class="rail">
+    <section class="block">
+      <h2>background</h2>
+      <div id="row-background"></div>
+    </section>
+
+    <section class="block">
+      <h2>tokens</h2>
+      <div id="rows-tokens"></div>
+      <div class="actions">
+        <button data-gen="palette">Generate all</button>
+        <button data-gen="identifier">Identifier</button>
+        <button data-gen="keyword">Keyword</button>
+        <button data-gen="comment">Comment</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>chrome</h2>
+      <div id="rows-chrome"></div>
+      <div class="actions">
+        <button data-gen="chrome">Generate chrome</button>
+      </div>
+      <p class="note">Italic values follow the background. Editing one pins it;
+      <span class="glyph">×</span> lets it go back.</p>
+    </section>
+  </aside>
+
+  <div class="work">
+    <div class="stage-head">
+      <label class="inline">language
+        <select id="language"></select>
+      </label>
+      <label class="inline">size
+        <input id="font-size" type="range" min="10" max="24" step="0.5" value="14">
+        <output id="font-size-out">14</output>
+      </label>
+      <label class="inline">vision
+        <select id="cvd">
+          <option value="">normal</option>
+          <option value="deuteranopia">deuteranopia</option>
+          <option value="protanopia">protanopia</option>
+          <option value="tritanopia">tritanopia</option>
+        </select>
+      </label>
+      <span class="hint" id="toggle-hint" hidden>press <kbd>space</kbd> to swap</span>
+    </div>
+
+    <div class="stage" id="stage">
+      <figure class="pane" id="pane-a">
+        <figcaption><span class="pane-name"></span></figcaption>
+        <div class="surface">
+          <div class="code-wrap">
+            <pre class="code" aria-hidden="true"></pre>
+            <textarea class="code-input" id="source" spellcheck="false"
+                      autocomplete="off" aria-label="Sample code"></textarea>
+          </div>
+          <div class="chrome-strip">
+            <span class="chip">defmacro</span>
+            <span class="chip">swap</span>
+            <span class="rule"></span>
+            <span class="frame">Lisp compiler</span>
+            <span class="caption">a caption, in muted</span>
+            <span class="danger">× the bad option</span>
+          </div>
+          <div class="math"></div>
+        </div>
+      </figure>
+
+      <figure class="pane" id="pane-b" hidden>
+        <figcaption><span class="pane-name"></span></figcaption>
+        <div class="surface">
+          <div class="code-wrap"><pre class="code"></pre></div>
+          <div class="chrome-strip">
+            <span class="chip">defmacro</span>
+            <span class="chip">swap</span>
+            <span class="rule"></span>
+            <span class="frame">Lisp compiler</span>
+            <span class="caption">a caption, in muted</span>
+            <span class="danger">× the bad option</span>
+          </div>
+          <div class="math"></div>
+        </div>
+      </figure>
+    </div>
+
+    <section class="instrument">
+      <h2>hue map</h2>
+      <div class="instrument-body">
+        <svg id="hue-map" viewBox="-130 -130 260 260" role="img"
+             aria-label="Palette plotted by hue and chroma"></svg>
+        <p class="note">Angle is hue, distance from the centre is chroma. Roles
+        sitting on top of each other are hard to tell apart in the code.</p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<dialog id="open-dialog">
+  <form method="dialog">
+    <h3>Open a theme</h3>
+    <ul id="theme-list" class="theme-list"></ul>
+    <label class="stacked">or a path to a <code>.theme.json</code>
+      <input id="open-path" type="text" spellcheck="false"
+             placeholder="~/themes/mine.theme.json">
+    </label>
+    <menu>
+      <button value="cancel">Cancel</button>
+      <button value="open" id="open-confirm" class="primary">Open</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="save-dialog">
+  <form method="dialog">
+    <h3>Save as</h3>
+    <label class="stacked">path
+      <input id="save-path" type="text" spellcheck="false">
+    </label>
+    <menu>
+      <button value="cancel">Cancel</button>
+      <button value="save" id="save-confirm" class="primary">Save</button>
+    </menu>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/katex.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
