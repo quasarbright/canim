@@ -14,6 +14,7 @@ and a localhost round trip is fast enough to debounce behind a drag.
 from __future__ import annotations
 
 import json
+import subprocess
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -24,6 +25,19 @@ from ..languages import BY_NAME, resolve
 from ..lexer import Kind, lex
 
 APP = Path(__file__).parent / "app"
+
+# Themes that are not canim's. The library ships a handful; everything else
+# belongs to whoever is using it, and the editor should still list those
+# rather than making you browse to them every time.
+WORKSPACE_DIRS: list[Path] = []
+
+
+def workspace_themes() -> list[dict]:
+    return [
+        {"name": path.name[: -len(theme_module.SUFFIX)], "path": str(path)}
+        for directory in WORKSPACE_DIRS
+        for path in sorted(directory.glob(f"*{theme_module.SUFFIX}"))
+    ]
 
 # What counts as worth a warning. Contrast is against the background and
 # decides legibility; separation is between two token colors and decides
@@ -104,13 +118,28 @@ def analyze(data: dict) -> dict:
     return {"contrast": contrast, "warnings": warnings, "oklch": oklch}
 
 
-GENERATORS = {
-    "palette": lambda d: palette.generate_palette(
+def whole_palette(d: dict) -> dict:
+    """Every token color and the chrome that goes with them.
+
+    Chrome comes along because it is not independent: it is built from the
+    background and the identifier, and the identifier is one of the things
+    just generated. Leaving it out means a theme whose panels and captions
+    were pinned to a previous background keep those values and quietly stop
+    matching — which reads as the generator producing a broken palette.
+    """
+    colors = palette.generate_palette(
         d["background"],
         spread=d.get("spread", palette.SPREAD),
         offset=d.get("offset", 0.0),
         chroma=d.get("chroma", palette.CHROMA),
-    ),
+        harmony=d.get("harmony", palette.DEFAULT_HARMONY),
+    )
+    chrome = palette.generate_chrome(d["background"], colors["identifier"])
+    return {**colors, **{f"chrome_{k}": v for k, v in chrome.items()}}
+
+
+GENERATORS = {
+    "palette": whole_palette,
     "chrome": lambda d: {
         f"chrome_{k}": v
         for k, v in palette.generate_chrome(d["background"], d["identifier"]).items()
@@ -118,7 +147,39 @@ GENERATORS = {
     "identifier": lambda d: {"identifier": palette.generate_identifier(d["background"])},
     "keyword": lambda d: {"keyword": palette.generate_keyword(d["background"])},
     "comment": lambda d: {"comment": palette.generate_comment(d["background"])},
+    # One row's button. Roles that share a color by convention resolve to
+    # whichever one owns it, so `operator` comes back as the keyword's.
+    "role": lambda d: {d["role"]: palette.generate_role(d["background"], d["role"])},
 }
+
+
+def choose_file(save: bool, suggested: str = "") -> str | None:
+    """A real file dialog, since a browser cannot offer a filesystem path.
+
+    Shelled out to AppleScript rather than faked with a text field. Returns
+    None when the dialog is cancelled, which is not an error.
+    """
+    themes = str(theme_module.THEMES_DIR)
+    if save:
+        script = (
+            f'set d to POSIX file "{themes}" as alias\n'
+            f'set f to choose file name with prompt "Save theme as"'
+            f' default name "{suggested}" default location d\n'
+            "POSIX path of f"
+        )
+    else:
+        script = (
+            f'set d to POSIX file "{themes}" as alias\n'
+            f'set f to choose file with prompt "Open a theme"'
+            f' default location d of type {{"json"}}\n'
+            "POSIX path of f"
+        )
+    done = subprocess.run(
+        ["osascript", "-e", script], capture_output=True, text=True
+    )
+    if done.returncode != 0:
+        return None  # cancelled
+    return done.stdout.strip() or None
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -127,6 +188,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def log_message(self, *args):  # quiet; this runs in a terminal you are using
         pass
+
+    def end_headers(self) -> None:
+        # No caching. This serves files you are editing, and a browser holding
+        # on to a stale app.js looks exactly like a bug in the code you just
+        # changed — which is what it looked like the first time it happened.
+        self.send_header("Cache-Control", "no-store, must-revalidate")
+        super().end_headers()
 
     # --- plumbing ----------------------------------------------------------
 
@@ -158,23 +226,56 @@ class Handler(SimpleHTTPRequestHandler):
 
     # --- routes ------------------------------------------------------------
 
+    def _send_index(self) -> None:
+        """index.html with the asset URLs stamped by modification time.
+
+        `Cache-Control: no-store` is not enough on its own. The very first
+        response for `app.js` went out without cache headers, so Chrome cached
+        it heuristically and stopped revalidating — it never asks again, so it
+        never sees the header telling it not to. Stamping the URL means an
+        edited file is a different URL and a stale entry cannot be reused.
+        """
+        html = (APP / "index.html").read_text()
+        for asset in ("app.js", "app.css"):
+            stamp = int((APP / asset).stat().st_mtime)
+            html = html.replace(f'"{asset}"', f'"{asset}?v={stamp}"')
+        body = html.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:
         url = urlparse(self.path)
         query = parse_qs(url.query)
+        if url.path in ("/", "/index.html"):
+            return self._send_index()
         if url.path == "/api/themes":
             return self._send(
                 {
                     "names": theme_module.discover(),
+                    "workspace": workspace_themes(),
                     "directory": str(theme_module.THEMES_DIR),
                     "languages": sorted(BY_NAME),
+                "harmonies": sorted(palette.HARMONY),
+                "defaults": {
+                    "harmony": palette.DEFAULT_HARMONY,
+                    "spread": palette.SPREAD,
+                    "chroma": palette.CHROMA,
+                },
                 }
             )
         if url.path == "/api/theme":
             try:
                 path = self._checked_path(query["path"][0])
-                return self._send(
-                    {"path": str(path), "theme": theme_module.to_dict(theme_module.open(path))}
-                )
+                return self._send({
+                    "path": str(path),
+                    "theme": theme_module.to_dict(theme_module.open(path)),
+                    # Whether this is one of the themes canim ships. The editor
+                    # will not let Save write back over one of those.
+                    "builtin": path.parent == theme_module.THEMES_DIR,
+                })
             except (KeyError, OSError, ValueError) as error:
                 return self._send({"error": str(error)}, 400)
         return super().do_GET()
@@ -200,6 +301,11 @@ class Handler(SimpleHTTPRequestHandler):
             if url.path.startswith("/api/generate/"):
                 which = url.path.rsplit("/", 1)[-1]
                 return self._send(GENERATORS[which](data))
+            if url.path == "/api/pick":
+                chosen = choose_file(
+                    save=bool(data.get("save")), suggested=data.get("suggested", "")
+                )
+                return self._send({"path": chosen})
             if url.path == "/api/theme":
                 path = self._checked_path(data["path"])
                 theme_module.save(theme_module.from_dict(data["theme"]), path)
@@ -209,10 +315,13 @@ class Handler(SimpleHTTPRequestHandler):
         self._send({"error": f"no route for {url.path}"}, 404)
 
 
-def serve(port: int = 8765) -> None:
+def serve(port: int = 8765, workspace: list[Path] | None = None) -> None:
+    WORKSPACE_DIRS[:] = [d for d in (workspace or []) if d.is_dir()]
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"canim theme editor — http://127.0.0.1:{port}")
-    print(f"themes in {theme_module.THEMES_DIR}")
+    print(f"built-in themes in {theme_module.THEMES_DIR}")
+    for directory in WORKSPACE_DIRS:
+        print(f"also listing {directory}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

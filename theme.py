@@ -179,10 +179,24 @@ def discover() -> list[str]:
     return sorted(p.name[: -len(SUFFIX)] for p in THEMES_DIR.glob(f"*{SUFFIX}"))
 
 
+# The themes canim ships, as objects. A caller should never have to know where
+# they live on disk: `theme.ONE_DARK` rather than a path, and `theme.open` with
+# a path only for themes that are not the library's.
+ONE_DARK = open("one-dark")
+ONE_DARK_SLATE = open("one-dark-slate")
+PASTEL_EVENING = open("pastel-evening")
+MONOKAI = open("monokai")
+SOLARIZED_DARK = open("solarized-dark")
+
+BUILT_IN = {
+    t.name: t
+    for t in (ONE_DARK, ONE_DARK_SLATE, PASTEL_EVENING, MONOKAI, SOLARIZED_DARK)
+}
+
 # What a `Code` block gets when nobody says otherwise. A video that wants a
 # different palette opens its own and passes it in, rather than reassigning
 # this — see `2026/macros/main.py`.
-DEFAULT = open("one-dark-slate")
+DEFAULT = ONE_DARK_SLATE
 
 # Set once here so every scene and every Code block agrees.
 FONT = "Monaco"

@@ -1,10 +1,10 @@
 /* The tool is achromatic on purpose.
 
-   You cannot judge a palette inside a coloured interface — any hue in the
+   You cannot judge a palette inside a colored interface — any hue in the
    chrome sits next to the swatches and contaminates the comparison. So every
-   pixel of this UI is a neutral grey, and the only colour on screen is the
+   pixel of this UI is a neutral gray, and the only color on screen is the
    theme being edited. Warnings signal with the ⚠️ glyph, which brings its own
-   colour, rather than with an accent that would break the rule.
+   color, rather than with an accent that would break the rule.
 
    Data is set in the same monospace canim renders with, so the preview is a
    little closer to the video than a browser default would be. */
@@ -157,24 +157,35 @@ main {
   overflow-y: auto;
 }
 
-/* --- colour rows -------------------------------------------------------- */
+/* --- color rows -------------------------------------------------------- */
 
 .row {
   display: grid;
-  grid-template-columns: 26px 1fr auto;
+  grid-template-columns: 26px 1fr auto auto;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   padding: 4px 0;
 }
-.row input[type=color] {
+/* The swatch is the control: click it for the picker, which carries the hex
+   field. A separate always-visible hex input spent a third of the rail on
+   something you edit once in twenty changes. */
+.row .swatch {
   width: 26px;
   height: 24px;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: none;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
 }
+.row .swatch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--swatch);
+}
+.row.derived .swatch { border-style: dashed; }
 .row .label {
   font: 12px var(--mono);
   color: var(--text);
@@ -183,37 +194,31 @@ main {
   gap: 5px;
   min-width: 0;
 }
-.row .warn { cursor: help; font-size: 11px; }
-.row .hex {
-  width: 76px;
-  font: 11.5px var(--mono);
-  color: var(--text);
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 3px 5px;
-}
-.row .hex.derived { color: var(--faint); font-style: italic; }
-.row .unpin {
+.row.derived .label { color: var(--faint); font-style: italic; }
+.row .warn { font-size: 11px; cursor: default; }
+.row .gen, .row .unpin {
   border: none;
   background: none;
   color: var(--faint);
-  padding: 0 2px;
-  font-family: var(--mono);
-  visibility: hidden;
+  padding: 2px 4px;
+  font: 12px var(--mono);
+  line-height: 1;
+  border-radius: 4px;
 }
+.row .gen:hover, .row .unpin:hover { background: var(--raised); color: var(--text); }
+.row .unpin { visibility: hidden; }
 .row.pinned .unpin { visibility: visible; }
 
 /* The readout: a hairline bar and a number, so a bad ratio is visible
    without reading it. Full width is 21:1, the top of the WCAG range. */
 .readout {
-  grid-column: 2 / 4;
+  grid-column: 2 / 5;
   display: flex;
   align-items: center;
   gap: 8px;
   margin: -2px 0 4px;
 }
-.readout .track {
+.readout .track { cursor: help;
   flex: 1;
   height: 2px;
   background: var(--line);
@@ -221,7 +226,7 @@ main {
 }
 .readout .fill { position: absolute; inset: 0 auto 0 0; background: var(--dim); }
 .readout .fill.low { background: var(--faint); }
-.readout .value {
+.readout .value { cursor: help;
   font: 10.5px var(--mono);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
@@ -270,15 +275,18 @@ kbd {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 18px;
+  padding: 1.3em;
   overflow: hidden;
+  /* Everything inside is sized in em off this one value, so the slider scales
+     the sample the way changing FONT_SIZE would scale a rendered scene. */
+  font-size: var(--preview-size, 14px);
 }
 
 .code-wrap { position: relative; }
 .code, .code-input {
   margin: 0;
   font-family: var(--mono);
-  font-size: var(--code-size, 14px);
+  font-size: 1em;
   line-height: 1.65;
   tab-size: 2;
   white-space: pre;
@@ -311,33 +319,33 @@ kbd {
 .k-comment     { color: var(--k-comment); }
 
 .chrome-strip {
-  margin-top: 20px;
+  margin-top: 1.5em;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 1em;
   flex-wrap: wrap;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: .86em;
 }
 .chip {
-  padding: 5px 9px;
-  border-radius: 6px;
+  padding: .4em .7em;
+  border-radius: .5em;
   background: var(--surface);
   border: 1px solid var(--surface-stroke);
   color: var(--k-identifier);
 }
 .frame {
-  padding: 10px 14px;
-  border-radius: 9px;
+  padding: .8em 1.1em;
+  border-radius: .7em;
   background: var(--frame);
   border: 1px solid var(--frame-stroke);
   color: var(--k-identifier);
 }
-.rule { width: 60px; height: 2px; background: var(--subtle); }
-.caption { color: var(--muted); font-family: var(--ui); font-size: 12px; }
+.rule { width: 5em; height: 2px; background: var(--subtle); }
+.caption { color: var(--muted); font-family: var(--ui); font-size: 1em; }
 .danger { color: var(--danger); }
 
-.math { margin-top: 20px; color: var(--k-identifier); font-size: 17px; }
+.math { margin-top: 1.5em; color: var(--k-identifier); font-size: 1.2em; }
 .math .mathcolor-keyword { color: var(--k-keyword); }
 
 /* --- instruments -------------------------------------------------------- */
@@ -413,3 +421,158 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; margin: 18px 0
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+
+/* --- warning tooltip ----------------------------------------------------- */
+
+/* Our own rather than `title`: the native one waits about a second before it
+   appears, which is far too slow for something you are meant to scan while
+   dragging a color. This shows on the first hover frame. */
+#tip {
+  position: fixed;
+  z-index: 60;
+  max-width: 32ch;
+  padding: 7px 10px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line-bright);
+  border-radius: 6px;
+  font: 11.5px/1.45 var(--ui);
+  pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+}
+#tip[hidden] { display: none; }
+#tip .line + .line { margin-top: 5px; }
+
+/* --- color picker -------------------------------------------------------- */
+
+#picker {
+  position: fixed;
+  z-index: 70;
+  width: 232px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line-bright);
+  border-radius: 9px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .6);
+}
+#picker[hidden] { display: none; }
+#picker .area {
+  position: relative;
+  height: 130px;
+  border-radius: 5px;
+  cursor: crosshair;
+  touch-action: none;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, transparent),
+    var(--picker-hue);
+}
+#picker .hue {
+  position: relative;
+  height: 12px;
+  margin-top: 10px;
+  border-radius: 3px;
+  cursor: ew-resize;
+  touch-action: none;
+  background: linear-gradient(to right,
+    #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
+}
+#picker .knob {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .55);
+  pointer-events: none;
+}
+#picker .hue .knob { top: 6px; margin-left: -6px; }
+#picker .foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+#picker .hex {
+  flex: 1;
+  font: 12px var(--mono);
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  text-transform: lowercase;
+}
+#picker .preview {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+
+/* --- hue map rainbow ------------------------------------------------------ */
+
+#hue-map .rainbow { fill: none; stroke-width: 7; }
+
+
+/* --- generation knobs ------------------------------------------------------ */
+
+.knobs {
+  margin-top: 12px;
+  display: grid;
+  gap: 7px;
+}
+.knob {
+  display: grid;
+  grid-template-columns: 62px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font: 10.5px var(--ui);
+  letter-spacing: .09em;
+  color: var(--dim);
+}
+.knob select { font-size: 11px; padding: 3px 5px; }
+.knob input[type=range] { width: 100%; accent-color: var(--dim); }
+.knob output {
+  font: 10.5px var(--mono);
+  color: var(--faint);
+  width: 30px;
+  text-align: right;
+}
+
+.block-head { display: flex; align-items: baseline; justify-content: space-between; }
+.col-head { margin-bottom: 10px; }
+
+/* The 4.5 tick: the line between readable and not, marked on the bar so the
+   number does not have to be read to know which side it falls on. */
+.readout .track::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 21.43%;            /* 4.5 of the 21 the bar spans */
+  width: 1px;
+  background: var(--faint);
+}
+
+/* Saving a built-in makes a copy instead of writing back. Worth saying before
+   the Save button surprises you, not only in the dialog afterwards. */
+.dirty.builtin { border-style: dashed; }
+
+.theme-list .group-label {
+  font: 500 10px var(--ui);
+  letter-spacing: .1em;
+  text-transform: lowercase;
+  color: var(--faint);
+  padding: 10px 6px 4px;
+  border-bottom: 0;
+}
+
+/* Sits where the background row's ✦ all sits, so "generate the whole group"
+   is in the same place in both sections. */
+.head-gen {
+  border: none;
+  background: none;
+  color: var(--faint);
+  font: 12px var(--mono);
+  padding: 0 4px 10px;
+  border-radius: 4px;
+}
+.head-gen:hover { color: var(--text); }

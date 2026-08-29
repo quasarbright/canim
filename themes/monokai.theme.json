@@ -1,0 +1,20 @@
+{
+  "name": "monokai",
+  "background": "#272822",
+  "identifier": "#f8f8f2",
+  "keyword": "#f92672",
+  "builtin": "#66d9ef",
+  "operator": "#f92672",
+  "literal": "#ae81ff",
+  "delimiter": "#f8f8f2",
+  "punctuation": "#f8f8f2",
+  "string": "#e6db74",
+  "comment": "#75715e",
+  "chrome_danger": "#f87580",
+  "chrome_frame": "#2e2f2a",
+  "chrome_frame_stroke": "#5c5c58",
+  "chrome_muted": "#a3a88c",
+  "chrome_subtle": "#8e927a",
+  "chrome_surface": "#33342f",
+  "chrome_surface_stroke": "#50514d"
+}

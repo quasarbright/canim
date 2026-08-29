@@ -62,7 +62,7 @@ def test_debug_blocks_are_looser_than_video_blocks():
     assert loose.height > tight.height
 
 
-# --- colour ----------------------------------------------------------------
+# --- color ----------------------------------------------------------------
 
 
 def label_colors(source, dest, mapping=()):
@@ -98,8 +98,8 @@ def test_change_is_infectious_on_a_grouped_label_only():
     """A split into one same word and one different word.
 
     The source label is one claim about the whole split, so it takes the change
-    colour. The destination labels each describe a single link, so they stay
-    coloured on their own terms.
+    color. The destination labels each describe a single link, so they stay
+    colored on their own terms.
     """
     from canim.debug import CHANGES, TRAVELS
 

@@ -66,8 +66,8 @@ def test_colliding_roles_are_flagged_on_both_sides():
     assert any("keyword" in m for m in result["warnings"]["builtin"])
 
 
-def test_sharing_a_colour_on_purpose_is_not_a_collision():
-    # Operators take the keyword's colour by convention, and delimiters take
+def test_sharing_a_color_on_purpose_is_not_a_collision():
+    # Operators take the keyword's color by convention, and delimiters take
     # the identifier's. Reporting those would flag every theme in the repo.
     result = analyze(a_theme())
     assert "operator" not in result["warnings"]

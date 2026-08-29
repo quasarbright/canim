@@ -1,0 +1,20 @@
+{
+  "name": "solarized-dark",
+  "background": "#002b36",
+  "identifier": "#839496",
+  "keyword": "#859900",
+  "builtin": "#268bd2",
+  "operator": "#859900",
+  "literal": "#d33682",
+  "delimiter": "#839496",
+  "punctuation": "#839496",
+  "string": "#2aa198",
+  "comment": "#586e75",
+  "chrome_danger": "#f87580",
+  "chrome_frame": "#0c323d",
+  "chrome_frame_stroke": "#465f66",
+  "chrome_muted": "#89abb6",
+  "chrome_subtle": "#75929b",
+  "chrome_surface": "#143741",
+  "chrome_surface_stroke": "#3a545c"
+}

@@ -1,6 +1,6 @@
-/* The page holds no colour maths and no lexer. Both live in canim and are
+/* The page holds no color math and no lexer. Both live in canim and are
    asked for over the API, so what you see is what a render produces rather
-   than a second implementation that drifts. Colours still apply instantly,
+   than a second implementation that drifts. Colors still apply instantly,
    because that part is only CSS custom properties. */
 
 (() => {
@@ -48,12 +48,152 @@ const state = {
   mode: "side",
   showing: "a",     // which theme the single pane shows in toggle mode
   cvd: "",
+  gen: { harmony: null, chroma: null, spread: null },  // filled from the server
+  builtin: false,   // opened from canim's own themes directory
+  openedAs: null,   // the name it had when opened, to spot a rename
 };
 
 const history = { past: [], future: [] };
 
 const $ = (sel) => document.querySelector(sel);
+
+// --- instant tooltip --------------------------------------------------------
+
+/* `title` waits about a second before it shows, which is useless for something
+   you scan while dragging a color. This appears on the first hover frame. */
+const tip = Object.assign(document.createElement("div"), { id: "tip", hidden: true });
+document.body.append(tip);
+
+function showTip(target, lines) {
+  tip.replaceChildren(...lines.map((text) =>
+    Object.assign(document.createElement("div"), { className: "line", textContent: text })));
+  tip.hidden = false;
+  const box = target.getBoundingClientRect();
+  const own = tip.getBoundingClientRect();
+  const left = Math.min(box.left, innerWidth - own.width - 10);
+  const above = box.top - own.height - 8;
+  tip.style.left = `${Math.max(8, left)}px`;
+  tip.style.top = `${above > 8 ? above : box.bottom + 8}px`;
+}
+
+const hideTip = () => { tip.hidden = true; };
+
+function withTip(node, lines) {
+  node.addEventListener("pointerenter", () => showTip(node, lines));
+  node.addEventListener("pointerleave", hideTip);
+  return node;
+}
 const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+
+
+
+// --- color picker -----------------------------------------------------------
+
+/* HSV↔hex lives here rather than on the server because it is the mechanics of
+   the input widget, not a judgement about color. Everything that decides
+   whether a palette is any good — contrast, separation, generation, OKLCH —
+   still happens in canim. Going over the wire per pointermove would also make
+   dragging feel dead. */
+
+function hexToHsv(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return { h, s: max ? d / max : 0, v: max };
+}
+
+function hsvToHex({ h, s, v }) {
+  const i = Math.floor(h * 6), f = h * 6 - i;
+  const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t],
+                     [p, q, v], [t, p, v], [v, p, q]][i % 6];
+  return "#" + [r, g, b].map((c) =>
+    Math.round(c * 255).toString(16).padStart(2, "0")).join("");
+}
+
+const picker = Object.assign(document.createElement("div"), { id: "picker", hidden: true });
+picker.innerHTML = `
+  <div class="area"><span class="knob"></span></div>
+  <div class="hue"><span class="knob"></span></div>
+  <div class="foot">
+    <span class="preview"></span>
+    <input class="hex" spellcheck="false" maxlength="7" aria-label="Hex color">
+  </div>`;
+document.body.append(picker);
+
+const pickerState = { hsv: { h: 0, s: 0, v: 0 }, onChange: null };
+
+function paintPicker() {
+  const hex = hsvToHex(pickerState.hsv);
+  const { h, s, v } = pickerState.hsv;
+  picker.style.setProperty("--picker-hue", hsvToHex({ h, s: 1, v: 1 }));
+  picker.querySelector(".area .knob").style.left = `${s * 100}%`;
+  picker.querySelector(".area .knob").style.top = `${(1 - v) * 100}%`;
+  picker.querySelector(".hue .knob").style.left = `${h * 100}%`;
+  picker.querySelector(".preview").style.background = hex;
+  const field = picker.querySelector(".hex");
+  if (document.activeElement !== field) field.value = hex;
+  return hex;
+}
+
+function openPicker(anchor, value, onChange) {
+  pickerState.hsv = hexToHsv(value);
+  pickerState.onChange = onChange;
+  picker.hidden = false;
+  paintPicker();
+  const box = anchor.getBoundingClientRect();
+  const own = picker.getBoundingClientRect();
+  picker.style.left = `${Math.min(box.left, innerWidth - own.width - 10)}px`;
+  picker.style.top = `${Math.min(box.bottom + 6, innerHeight - own.height - 10)}px`;
+  picker.querySelector(".hex").focus({ preventScroll: true });
+}
+
+const closePicker = () => { picker.hidden = true; pickerState.onChange = null; };
+
+function drag(node, move) {
+  node.addEventListener("pointerdown", (event) => {
+    node.setPointerCapture(event.pointerId);
+    const run = (e) => {
+      const box = node.getBoundingClientRect();
+      move((e.clientX - box.left) / box.width, (e.clientY - box.top) / box.height);
+      pickerState.onChange?.(paintPicker());
+    };
+    run(event);
+    const up = () => {
+      node.removeEventListener("pointermove", run);
+      node.removeEventListener("pointerup", up);
+    };
+    node.addEventListener("pointermove", run);
+    node.addEventListener("pointerup", up);
+  });
+}
+
+const clamp = (n) => Math.max(0, Math.min(1, n));
+drag(picker.querySelector(".area"), (x, y) => {
+  pickerState.hsv.s = clamp(x);
+  pickerState.hsv.v = clamp(1 - y);
+});
+drag(picker.querySelector(".hue"), (x) => { pickerState.hsv.h = clamp(x); });
+
+picker.querySelector(".hex").addEventListener("input", (event) => {
+  const value = event.target.value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    pickerState.hsv = hexToHsv(value.toLowerCase());
+    paintPicker();
+    pickerState.onChange?.(value.toLowerCase());
+  }
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (!picker.hidden && !picker.contains(event.target)
+      && !event.target.closest(".swatch")) closePicker();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePicker(); });
 
 // --- talking to canim -------------------------------------------------------
 
@@ -101,53 +241,83 @@ function colorRow(role, { chrome = false } = {}) {
   const pinned = !chrome || key in state.theme;
   const value = state.theme[key] ?? derivedValue(role);
 
-  const row = el("div", { className: "row" + (chrome && pinned ? " pinned" : "") });
+  const row = el("div", { className: "row" });
+  row.classList.toggle("pinned", chrome && pinned);
+  row.classList.toggle("derived", chrome && !pinned);
   row.dataset.key = key;
 
-  const swatch = el("input", { type: "color", value });
-  swatch.setAttribute("aria-label", role);
-  // `input`, not `change`: this is what makes the preview follow the cursor
-  // around the picker rather than waiting for the mouse to come up.
-  swatch.addEventListener("input", (e) => setColor(key, e.target.value));
+  const swatch = el("button", { className: "swatch", type: "button" });
+  swatch.style.setProperty("--swatch", value);
+  swatch.setAttribute("aria-label", `${role} — ${value}`);
+  swatch.addEventListener("click", () => {
+    openPicker(swatch, value, (next) => setColor(key, next));
+  });
 
   const label = el("span", { className: "label" });
   label.append(el("span", { textContent: role }));
   const warnings = state.analysis.warnings[key];
   if (warnings) {
-    label.append(el("span", {
-      className: "warn", textContent: "⚠️", title: warnings.join("\n"),
-    }));
+    label.append(withTip(el("span", { className: "warn", textContent: "⚠️" }), warnings));
   }
 
-  const hex = el("input", { className: "hex" + (pinned ? "" : " derived"), value });
-  hex.addEventListener("input", (e) => {
-    if (/^#[0-9a-fA-F]{6}$/.test(e.target.value.trim())) {
-      setColor(key, e.target.value.trim().toLowerCase());
-    }
+  // One button per row, generating that role the way the whole-palette pass
+  // would. On the background it generates everything, because "from the
+  // background" is the only thing the background could mean.
+  const isBackground = role === "background";
+  const gen = el("button", {
+    className: "gen", type: "button", textContent: isBackground ? "✦ all" : "✦",
+  });
+  withTip(gen, [isBackground
+    ? "Generate every token color from this background."
+    : `Generate ${role} from the background.`]);
+  gen.addEventListener("click", async () => {
+    try {
+      let produced;
+      if (isBackground) {
+        produced = await api("/api/generate/palette", { ...state.theme, ...state.gen });
+      } else if (chrome) {
+        // Chrome is generated as a set — take the one field this row owns,
+        // which also pins it, since a generated value is a chosen one.
+        const all = await api("/api/generate/chrome", state.theme);
+        produced = { [key]: all[key] };
+      } else {
+        produced = await api("/api/generate/role",
+          { background: state.theme.background, role });
+      }
+      change((theme) => Object.assign(theme, produced));
+    } catch (error) { toast(error.message); }
   });
 
-  const unpin = el("button", { className: "unpin", textContent: "×", title: "back to derived" });
-  unpin.addEventListener("click", () => change((t) => { delete t[key]; }));
+  row.append(swatch, label, gen);
 
-  row.append(swatch, label, hex);
-  if (chrome) row.append(unpin);
+  if (chrome) {
+    const unpin = el("button", { className: "unpin", type: "button", textContent: "×" });
+    withTip(unpin, ["Let this follow the background again."]);
+    unpin.addEventListener("click", () => change((t) => { delete t[key]; }));
+    row.append(unpin);
+  } else {
+    row.append(el("span"));
+  }
 
   const ratio = state.analysis.contrast[key];
-  if (ratio !== undefined && role !== "background") {
-    row.after();
-    const readout = el("div", { className: "readout" });
-    const track = el("div", { className: "track" });
-    const fill = el("div", {
-      className: "fill" + (ratio < 4.5 ? " low" : ""),
-    });
-    fill.style.width = `${Math.min(100, (ratio / 21) * 100)}%`;
-    track.append(fill);
-    readout.append(track, el("span", { className: "value", textContent: `${ratio.toFixed(1)}:1` }));
-    const wrap = el("div");
-    wrap.append(row, readout);
-    return wrap;
-  }
-  return row;
+  if (ratio === undefined || isBackground) return row;
+
+  const readout = el("div", { className: "readout" });
+  const track = el("div", { className: "track" });
+  const fill = el("div", { className: "fill" + (ratio < 4.5 ? " low" : "") });
+  fill.style.width = `${Math.min(100, (ratio / 21) * 100)}%`;
+  track.append(fill);
+  const explanation = `Contrast against the background: ${ratio.toFixed(1)} to 1. `
+    + "The tick is 4.5, about where text stops being comfortable to read. "
+    + "The bar is full at 21, the most any two colors can differ.";
+  track.title = explanation;
+  const number = el("span", { className: "value", textContent: `${ratio.toFixed(1)}:1` });
+  number.title = explanation;
+  readout.append(track, number);
+
+  const wrap = el("div");
+  wrap.append(row, readout);
+  return wrap;
 }
 
 /* What an unpinned chrome field currently resolves to. The server already
@@ -202,7 +372,7 @@ async function renderCode() {
 
 function renderMath(node, theme) {
   // The formula is the one the video's own scenes are about: a macro call and
-  // what it expands to. Its parts take the palette's working colours.
+  // what it expands to. Its parts take the palette's working colors.
   const tex = String.raw`\textcolor{${theme.keyword}}{\texttt{swap}}
     (\textcolor{${theme.identifier}}{a}, \textcolor{${theme.identifier}}{b})
     \;\longmapsto\;
@@ -243,7 +413,7 @@ async function renderPanes() {
 }
 
 /* What to actually paint: the theme, or the theme as someone with that form
-   of colour blindness sees it. */
+   of color blindness sees it. */
 async function displayTheme(theme) {
   const full = await resolveChrome(theme);
   if (!state.cvd) return full;
@@ -265,6 +435,22 @@ function renderHueMap() {
     svg.append(node);
     return node;
   };
+
+  // A full-chroma rainbow at the rim, so the plot reads as the hue wheel it
+  // is: every dot's angle can be checked against the color sitting out there.
+  // Drawn as arcs rather than a gradient because the wheel wraps, and a
+  // linear gradient cannot close a circle.
+  const RIM = 122;
+  for (let angle = 0; angle < 360; angle += 4) {
+    const a0 = (angle * Math.PI) / 180;
+    const a1 = ((angle + 4.6) * Math.PI) / 180;
+    add("path", {
+      class: "rainbow",
+      stroke: `hsl(${angle} 95% 60%)`,
+      d: `M ${RIM * Math.cos(a0)} ${-RIM * Math.sin(a0)}`
+       + ` A ${RIM} ${RIM} 0 0 0 ${RIM * Math.cos(a1)} ${-RIM * Math.sin(a1)}`,
+    });
+  }
 
   for (const r of [40, 80, 120]) add("circle", { class: "ring", cx: 0, cy: 0, r });
   for (let angle = 0; angle < 360; angle += 30) {
@@ -304,6 +490,7 @@ let analyzeTimer = null;
 function render() {
   $("#theme-name").value = state.theme.name;
   $("#dirty").hidden = !dirty();
+  $("#builtin").hidden = !state.builtin;
 
   const background = colorRow("background");
   $("#row-background").replaceChildren(background);
@@ -315,7 +502,7 @@ function render() {
   renderPanes();
   renderHueMap();
 
-  // Colours are already on screen by now; the numbers can lag a frame or two
+  // Colors are already on screen by now; the numbers can lag a frame or two
   // behind a drag without anyone noticing.
   clearTimeout(analyzeTimer);
   analyzeTimer = setTimeout(async () => {
@@ -343,9 +530,12 @@ function toast(message) {
 // --- files ------------------------------------------------------------------
 
 async function openTheme(path) {
-  const { theme, path: resolved } = await api(`/api/theme?path=${encodeURIComponent(path)}`);
+  const { theme, path: resolved, builtin } = await api(
+    `/api/theme?path=${encodeURIComponent(path)}`);
   state.theme = theme;
   state.path = resolved;
+  state.builtin = Boolean(builtin);
+  state.openedAs = theme.name;
   state.saved = JSON.stringify(theme);
   history.past.length = history.future.length = 0;
   render();
@@ -353,20 +543,36 @@ async function openTheme(path) {
 }
 
 async function save(path) {
+  // Save never writes back over a theme canim ships. Editing one and hitting
+  // Save is how you explore, not how you replace what the videos render with,
+  // so it turns into Save as with a name of its own.
+  if (!path && state.builtin) return saveAs();
   const target = path || state.path;
   if (!target) return saveAs();
   await api("/api/theme", { path: target, theme: state.theme });
   state.path = target;
+  state.builtin = false;   // wherever it landed, it is yours now
+  state.openedAs = state.theme.name;
   state.saved = JSON.stringify(state.theme);
-  $("#dirty").hidden = true;
+  render();   // the built-in and unsaved badges both just changed
   toast(`Saved to ${target}`);
 }
 
+/** What a copy of the current theme should be called. */
+function suggestedName() {
+  const name = state.theme.name.trim();
+  // Only rename when it is still carrying the built-in's own name. Once you
+  // have called it something, that is the name.
+  return state.builtin && name === state.openedAs ? `${name} custom` : name;
+}
+
 function saveAs() {
-  const slug = state.theme.name.trim().replace(/\s+/g, "-") || "untitled";
-  $("#save-path").value = state.path
-    ? state.path.replace(/[^/]+$/, `${slug}.theme.json`)
-    : `${catalogue.directory}/${slug}.theme.json`;
+  $("#save-current").textContent = state.builtin
+    ? `${state.openedAs} is one of canim's own themes, so it is not written `
+      + `back over. Choose where your version goes.`
+    : state.path
+      ? `Currently saved at ${state.path}`
+      : "Not saved anywhere yet.";
   $("#save-dialog").showModal();
 }
 
@@ -383,13 +589,39 @@ async function refreshCatalogue() {
     el("option", { value: "", textContent: "off" }),
     ...catalogue.names.map((name) => el("option", { value: name, textContent: name }))
   );
+
+  // The knobs start where canim's own defaults are, rather than at a number
+  // typed into the page that could drift from them.
+  const { harmony, spread, chroma } = catalogue.defaults;
+  state.gen = { harmony, spread, chroma };
+  $("#harmony").replaceChildren(
+    ...catalogue.harmonies.map((name) =>
+      el("option", { value: name, textContent: name, selected: name === harmony }))
+  );
+  for (const [id, value] of [["chroma", chroma], ["spread", spread]]) {
+    $(`#${id}`).value = value;
+    knobLabel(id, value);
+  }
 }
 
 async function fillThemeList() {
   const list = $("#theme-list");
   list.replaceChildren();
-  for (const name of catalogue.names) {
-    const { theme } = await api(`/api/theme?path=${encodeURIComponent(name)}`);
+  const groups = [
+    ["canim", catalogue.names.map((name) => ({ name, at: name }))],
+    ["yours", (catalogue.workspace || []).map((t) => ({ name: t.name, at: t.path }))],
+  ];
+  for (const [label, entries] of groups) {
+    if (!entries.length) continue;
+    list.append(el("li", { className: "group-label", textContent: label }));
+    await addEntries(entries);
+  }
+}
+
+async function addEntries(entries) {
+  const list = $("#theme-list");
+  for (const { name, at } of entries) {
+    const { theme } = await api(`/api/theme?path=${encodeURIComponent(at)}`);
     const button = el("button", { type: "button" });
     button.append(el("span", { textContent: name }));
     const swatches = el("span", { className: "swatches" });
@@ -401,7 +633,7 @@ async function fillThemeList() {
     button.append(swatches);
     button.addEventListener("click", () => {
       $("#open-dialog").close();
-      openTheme(name).catch((e) => toast(e.message));
+      openTheme(at).catch((e) => toast(e.message));
     });
     const item = el("li");
     item.append(button);
@@ -424,7 +656,7 @@ document.addEventListener("click", async (event) => {
     if (action === "redo") redo();
 
     if (generate) {
-      const produced = await api(`/api/generate/${generate}`, state.theme);
+      const produced = await api(`/api/generate/${generate}`, { ...state.theme, ...state.gen });
       change((theme) => Object.assign(theme, produced));
       toast(generate === "palette" ? "Generated a palette" : `Generated ${generate}`);
     }
@@ -453,9 +685,23 @@ $("#language").addEventListener("change", (e) => {
 $("#source").addEventListener("input", () => renderCode());
 
 $("#font-size").addEventListener("input", (e) => {
-  document.documentElement.style.setProperty("--code-size", `${e.target.value}px`);
+  // The surface sizes everything inside it off this, so the chrome strip and
+  // the formula scale with the code rather than staying put.
+  document.documentElement.style.setProperty("--preview-size", `${e.target.value}px`);
   $("#font-size-out").value = e.target.value;
 });
+
+function knobLabel(id, value) {
+  $(`#${id}-out`).value = id === "chroma" ? Number(value).toFixed(2) : Math.round(value);
+}
+
+for (const id of ["chroma", "spread"]) {
+  $(`#${id}`).addEventListener("input", (event) => {
+    state.gen[id] = Number(event.target.value);
+    knobLabel(id, event.target.value);
+  });
+}
+$("#harmony").addEventListener("change", (e) => { state.gen.harmony = e.target.value; });
 
 $("#cvd").addEventListener("change", (e) => { state.cvd = e.target.value; renderPanes(); });
 
@@ -470,16 +716,27 @@ $("#compare-with").addEventListener("change", async (e) => {
   renderPanes();
 });
 
-$("#open-confirm").addEventListener("click", () => {
-  const path = $("#open-path").value.trim();
-  if (path) openTheme(path).catch((error) => toast(error.message));
+$("#open-browse").addEventListener("click", async () => {
+  try {
+    const { path } = await api("/api/pick", { save: false });
+    if (!path) return;  // cancelled
+    $("#open-dialog").close();
+    await openTheme(path);
+  } catch (error) { toast(error.message); }
 });
 
-// On the button rather than the dialog's `close` event: a dialog closed by
-// script does not reliably carry its returnValue through to the listener, and
-// a save that silently does not happen is the worst possible failure here.
-$("#save-confirm").addEventListener("click", () => {
-  save($("#save-path").value.trim()).catch((error) => toast(error.message));
+$("#save-browse").addEventListener("click", async () => {
+  try {
+    const name = suggestedName();
+    const slug = name.replace(/\s+/g, "-") || "untitled";
+    const { path } = await api("/api/pick", { save: true, suggested: `${slug}.theme.json` });
+    if (!path) return;  // cancelled
+    // The copy carries the suggested name, so the file and the theme inside
+    // it agree about what it is called.
+    if (name !== state.theme.name) change((theme) => { theme.name = name; });
+    $("#save-dialog").close();
+    await save(path.endsWith(".theme.json") ? path : `${path}.theme.json`);
+  } catch (error) { toast(error.message); }
 });
 
 document.addEventListener("keydown", (event) => {

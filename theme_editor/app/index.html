@@ -12,6 +12,7 @@
 <header class="bar">
   <span class="mark">canim</span>
   <input id="theme-name" class="name" spellcheck="false" aria-label="Theme name">
+  <span id="builtin" class="dirty builtin" hidden>built-in</span>
   <span id="dirty" class="dirty" hidden>unsaved</span>
 
   <div class="group">
@@ -41,27 +42,39 @@
     <section class="block">
       <h2>background</h2>
       <div id="row-background"></div>
+      <div class="knobs">
+        <label class="knob">harmony
+          <select id="harmony"></select>
+        </label>
+        <label class="knob">vividness
+          <input id="chroma" type="range" min="0.06" max="0.30" step="0.005">
+          <output id="chroma-out"></output>
+        </label>
+        <label class="knob">spread
+          <input id="spread" type="range" min="40" max="300" step="5">
+          <output id="spread-out"></output>
+        </label>
+      </div>
     </section>
 
     <section class="block">
-      <h2>tokens</h2>
+      <div class="block-head">
+        <h2>tokens</h2>
+        <h2 class="col-head" id="contrast-head">contrast</h2>
+      </div>
       <div id="rows-tokens"></div>
-      <div class="actions">
-        <button data-gen="palette">Generate all</button>
-        <button data-gen="identifier">Identifier</button>
-        <button data-gen="keyword">Keyword</button>
-        <button data-gen="comment">Comment</button>
-      </div>
     </section>
 
     <section class="block">
-      <h2>chrome</h2>
-      <div id="rows-chrome"></div>
-      <div class="actions">
-        <button data-gen="chrome">Generate chrome</button>
+      <div class="block-head">
+        <h2>chrome</h2>
+        <button class="head-gen" data-gen="chrome"
+                title="Generate every chrome color from the background.">✦ all</button>
       </div>
-      <p class="note">Italic values follow the background. Editing one pins it;
-      <span class="glyph">×</span> lets it go back.</p>
+      <div id="rows-chrome"></div>
+      <p class="note">Italic values follow the background. Editing or
+      generating one pins it; <span class="glyph">×</span> lets it go back.
+      <span class="glyph">✦</span> generates from the background.</p>
     </section>
   </aside>
 
@@ -74,7 +87,7 @@
         <input id="font-size" type="range" min="10" max="24" step="0.5" value="14">
         <output id="font-size-out">14</output>
       </label>
-      <label class="inline">vision
+      <label class="inline">color blindness
         <select id="cvd">
           <option value="">normal</option>
           <option value="deuteranopia">deuteranopia</option>
@@ -126,9 +139,9 @@
     <section class="instrument">
       <h2>hue map</h2>
       <div class="instrument-body">
-        <svg id="hue-map" viewBox="-130 -130 260 260" role="img"
+        <svg id="hue-map" viewBox="-134 -134 268 268" role="img"
              aria-label="Palette plotted by hue and chroma"></svg>
-        <p class="note">Angle is hue, distance from the centre is chroma. Roles
+        <p class="note">Angle is hue, distance from the center is chroma, and the rim shows that hue at full strength. Roles
         sitting on top of each other are hard to tell apart in the code.</p>
       </div>
     </section>
@@ -139,13 +152,9 @@
   <form method="dialog">
     <h3>Open a theme</h3>
     <ul id="theme-list" class="theme-list"></ul>
-    <label class="stacked">or a path to a <code>.theme.json</code>
-      <input id="open-path" type="text" spellcheck="false"
-             placeholder="~/themes/mine.theme.json">
-    </label>
     <menu>
       <button value="cancel">Cancel</button>
-      <button value="open" id="open-confirm" class="primary">Open</button>
+      <button type="button" id="open-browse" class="primary">Browse files…</button>
     </menu>
   </form>
 </dialog>
@@ -153,12 +162,10 @@
 <dialog id="save-dialog">
   <form method="dialog">
     <h3>Save as</h3>
-    <label class="stacked">path
-      <input id="save-path" type="text" spellcheck="false">
-    </label>
+    <p class="note" id="save-current"></p>
     <menu>
       <button value="cancel">Cancel</button>
-      <button value="save" id="save-confirm" class="primary">Save</button>
+      <button type="button" id="save-browse" class="primary">Choose location…</button>
     </menu>
   </form>
 </dialog>

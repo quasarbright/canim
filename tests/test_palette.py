@@ -48,26 +48,26 @@ def test_any_one_kind_of_difference_is_enough_on_its_own():
     assert P.separation("#e08a5a", "#5a9be0") > 1.0  # hue carries it
 
 
-def test_a_near_grey_beside_a_colour_is_distinguishable():
+def test_a_near_gray_beside_a_color_is_distinguishable():
     # One Dark's identifier and builtin. Their chroma *distance* matches
     # marine's two teals almost exactly, and the verdicts are opposite: what
-    # separates these is that one is nearly grey and the other is not.
+    # separates these is that one is nearly gray and the other is not.
     assert P.separation("#abb2bf", "#56b6c2") > 1.0
 
 
-def test_two_colours_of_the_same_hue_and_chroma_are_not():
+def test_two_colors_of_the_same_hue_and_chroma_are_not():
     assert P.separation("#28c8b3", "#2edcff") < 1.0
 
 
-def test_hue_is_ignored_when_neither_colour_has_any():
-    # Two near-greys can be far apart in nominal hue and look identical, so
+def test_hue_is_ignored_when_neither_color_has_any():
+    # Two near-grays can be far apart in nominal hue and look identical, so
     # hue must not rescue them.
     assert P.separation("#7f7f80", "#807f7f") < 1.0
 
 
 def test_separation_catches_what_contrast_misses():
     # Picking a comment for marine's teal background by contrast alone gave
-    # #3f9186, which clears 4.6:1 and is visibly the keyword's colour. The one
+    # #3f9186, which clears 4.6:1 and is visibly the keyword's color. The one
     # that got used, #186d61, is dimmer *and* further away. Contrast cannot
     # tell those two apart; separation can.
     background, keyword = "#022c26", "#28c8b3"
@@ -120,17 +120,31 @@ def test_a_neutral_background_gets_the_canonical_hues():
 
 
 @pytest.mark.parametrize("background", ["#08004d", "#510606", "#022210"])
-def test_a_saturated_background_pushes_accents_off_its_own_hue(background):
+def test_opposite_harmony_pushes_accents_off_the_background_hue(background):
     _, _, background_hue = P.to_oklch(background)
-    for hue in P.accent_hues(background).values():
+    for hue in P.accent_hues(background, harmony="opposite").values():
         assert P.hue_gap(hue, background_hue) > 40
 
 
-def test_offset_rotates_without_changing_the_shape():
-    a = P.accent_hues("#08004d", offset=0)
-    b = P.accent_hues("#08004d", offset=40)
-    assert a != b
-    assert sorted(P.hue_gap(a[r], b[r]) for r in a) == pytest.approx([40] * 4, abs=1)
+@pytest.mark.parametrize("background", ["#08004d", "#510606", "#022210"])
+def test_kindred_harmony_puts_one_accent_on_the_background_hue(background):
+    # What makes a theme read as being *about* a color: the loudest role sits
+    # on the background's own hue instead of avoiding it. Measured off the
+    # hand-made themes, where that offset is 356, 358 and 0.5 degrees.
+    _, _, background_hue = P.to_oklch(background)
+    gaps = [P.hue_gap(h, background_hue)
+            for h in P.accent_hues(background, harmony="kindred").values()]
+    assert min(gaps) < 25
+
+
+def test_offset_rotates_the_whole_fan():
+    # Rotate the first set by hand and compare the two as sets. Pairing them
+    # off in sorted order does not work: the fan can cross 360, and then the
+    # rotated copy sorts into a different order than its source.
+    a = P.accent_hues("#08004d", offset=0).values()
+    b = P.accent_hues("#08004d", offset=40).values()
+    assert sorted(a) != sorted(b)
+    assert sorted((h + 40) % 360 for h in a) == pytest.approx(sorted(b), abs=1)
 
 
 def test_chroma_controls_vividness():
@@ -177,11 +191,11 @@ def test_danger_gets_as_far_from_a_red_background_as_the_band_allows():
     assert P.hue_gap(hue, background_hue) == pytest.approx(furthest, abs=1)
 
 
-# --- colour blindness -------------------------------------------------------
+# --- color blindness -------------------------------------------------------
 
 
 @pytest.mark.parametrize("kind", ["protanopia", "deuteranopia", "tritanopia"])
-def test_simulation_returns_a_colour(kind):
+def test_simulation_returns_a_color(kind):
     assert P.simulate("#c678dd", kind).startswith("#")
     assert len(P.simulate("#c678dd", kind)) == 7
 
@@ -192,3 +206,9 @@ def test_deuteranopia_pulls_red_and_green_together():
         P.simulate("#ff0000", "deuteranopia"), P.simulate("#00ff00", "deuteranopia")
     )
     assert after < before
+
+
+def test_generating_a_palette_leaves_every_role_readable_on_both_new_themes():
+    for background in ("#272822", "#002b36"):   # monokai, solarized dark
+        for role, color in P.generate_palette(background).items():
+            assert P.contrast(background, color) >= 4.4, f"{role} on {background}"

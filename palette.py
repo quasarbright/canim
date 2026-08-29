@@ -109,7 +109,7 @@ CHROMA_ENOUGH = 0.06
 HUE_ENOUGH = 45.0
 """They are clearly different colors — only meaningful if both have a color."""
 CHROMATIC = 0.04
-"""Below this a color is grey enough that its hue is not perceptible."""
+"""Below this a color is gray enough that its hue is not perceptible."""
 
 
 def separation(a: Hex, b: Hex) -> float:
@@ -127,11 +127,11 @@ def separation(a: Hex, b: Hex) -> float:
 
     Note rows one and two: nearly identical chroma *distance* in OKLab, and
     opposite verdicts. Averaging the axes — a euclidean distance — cannot tell
-    them apart, because what makes one/builtin readable is that a near-grey
+    them apart, because what makes one/builtin readable is that a near-gray
     and a cyan differ in how colorful they are, while marine's two teals are
     equally colorful and merely a few degrees apart in hue.
 
-    Hue only counts when both colors have enough chroma to show one. Two greys
+    Hue only counts when both colors have enough chroma to show one. Two grays
     can be 180 degrees apart in nominal hue and look identical.
 
     Contrast says nothing about any of this: two colors can both clear 7:1
@@ -189,9 +189,9 @@ ROLE_CHROMA = {"keyword": 1.0, "builtin": 0.92, "literal": 1.05, "string": 0.98}
 # across hues — this is the whole reason for working here rather than in HSL.
 ROLE_LIGHTNESS = {"keyword": 0.75, "builtin": 0.78, "literal": 0.82, "string": 0.80}
 
-CHROMA = 0.15  # how vivid a generated palette is, before per-role weighting
+CHROMA = 0.19  # how vivid a generated palette is, before per-role weighting
 
-SPREAD = 185.0
+SPREAD = 140.0
 """How much of the wheel the four accents occupy.
 
 Wide enough that adjacent roles stay apart. At 135 a dark green background put
@@ -219,8 +219,30 @@ keyword.
 """
 
 
+HARMONY = {"opposite": 180.0, "kindred": 0.0}
+"""Where the fan of accents sits relative to the background's hue.
+
+`opposite` puts them on the far side of the wheel. Nothing lands on the
+background's hue, so nothing goes flat against it and the roles stay well
+apart — the safe choice, and what One Dark does.
+
+`kindred` centers the fan on the background's own hue, so one accent lands
+right on it. That is what makes a theme read as being *about* a color rather
+than as a neutral palette on a colored ground. Measured off three hand-made
+themes: forest fire puts its keyword at 356 degrees from the background, tree
+frog its builtin at 358, marine its keyword at 0.5 — in each case the loudest
+role sits exactly on the background's hue, with the rest fanning off to one
+side. It risks collisions the warnings will catch.
+"""
+
+DEFAULT_HARMONY = "kindred"
+
+
 def accent_hues(
-    background: Hex, spread: float = SPREAD, offset: float = 0.0
+    background: Hex,
+    spread: float = SPREAD,
+    offset: float = 0.0,
+    harmony: str = DEFAULT_HARMONY,
 ) -> dict[str, float]:
     """Four hues for the four accent roles, placed against the background.
 
@@ -239,8 +261,8 @@ def accent_hues(
     if chroma < NEUTRAL_CHROMA:
         return {role: (hue + offset) % 360 for role, hue in CANONICAL_HUES.items()}
 
-    centre = background_hue + 180 + offset
-    hues = [centre - spread / 2 + spread * i / 3 for i in range(4)]
+    center = background_hue + HARMONY[harmony] + offset
+    hues = [center - spread / 2 + spread * i / 3 for i in range(4)]
 
     roles = list(CANONICAL_HUES)
     best, best_cost = None, None
@@ -281,9 +303,10 @@ def generate_palette(
     spread: float = SPREAD,
     offset: float = 0.0,
     chroma: float = CHROMA,
+    harmony: str = DEFAULT_HARMONY,
 ) -> dict[str, Hex]:
     """Every token color for a background: the whole palette in one call."""
-    hues = accent_hues(background, spread, offset)
+    hues = accent_hues(background, spread, offset, harmony)
     colors = {}
     for role, hue in hues.items():
         colors[role] = lift_to_contrast(
@@ -359,3 +382,30 @@ def simulate(hex_color: Hex, kind: str) -> Hex:
     r, g, b = (_linear(c) for c in _to_rgb(hex_color))
     out = tuple(sum(m * v for m, v in zip(row, (r, g, b))) for row in matrix)
     return _to_hex(tuple(_gamma(max(0.0, min(1.0, v))) for v in out))
+
+
+# Which generator each role goes through, so one button per row can call the
+# same machinery the whole-palette pass uses rather than a parallel set of
+# rules that drift from it.
+ROLE_SOURCE = {
+    "identifier": "identifier", "delimiter": "identifier", "punctuation": "identifier",
+    "comment": "comment",
+    "keyword": "keyword", "operator": "keyword",
+    "builtin": "builtin", "literal": "literal", "string": "string",
+}
+
+
+def generate_role(background: Hex, role: str, **kwargs) -> Hex:
+    """One role, generated the way a full palette would generate it.
+
+    Roles that conventionally share a color resolve to whichever one owns it:
+    asking for `operator` gives the keyword's, asking for `delimiter` gives
+    the identifier's. A per-row button that produced something *near* the
+    color it is meant to match would quietly break the convention.
+    """
+    source = ROLE_SOURCE[role]
+    if source == "identifier":
+        return generate_identifier(background)
+    if source == "comment":
+        return generate_comment(background)
+    return generate_accent(background, source, **kwargs)

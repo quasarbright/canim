@@ -106,7 +106,7 @@ def test_a_short_hex_is_refused_by_name():
         theme.from_dict(data)
 
 
-def test_a_missing_colour_is_refused_by_name():
+def test_a_missing_color_is_refused_by_name():
     data = theme.to_dict(a_theme())
     del data["string"]
     with pytest.raises(ValueError, match="no color for 'string'"):
@@ -117,3 +117,30 @@ def test_hex_case_is_normalised():
     data = theme.to_dict(a_theme())
     data["keyword"] = "#AABBCC"
     assert theme.from_dict(data).colors[Kind.KEYWORD] == "#aabbcc"
+
+
+# --- what the library ships -------------------------------------------------
+
+
+def test_built_ins_are_objects_not_paths():
+    # A caller should never have to know where these live on disk.
+    for shipped in (theme.ONE_DARK, theme.ONE_DARK_SLATE, theme.PASTEL_EVENING,
+                    theme.MONOKAI, theme.SOLARIZED_DARK):
+        assert isinstance(shipped, theme.Theme)
+        assert set(shipped.colors) == set(Kind)
+
+
+def test_built_in_registry_matches_what_is_on_disk():
+    assert sorted(theme.BUILT_IN) == theme.discover()
+
+
+def test_the_default_is_one_dark_slate():
+    assert theme.DEFAULT is theme.ONE_DARK_SLATE
+
+
+def test_the_library_ships_only_its_own_themes():
+    # Everything else moved to the repo's own `themes/`, so the library stays
+    # a library rather than a collection of one person's palettes.
+    assert theme.discover() == [
+        "monokai", "one-dark", "one-dark-slate", "pastel-evening", "solarized-dark",
+    ]

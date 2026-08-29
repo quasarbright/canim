@@ -11,7 +11,7 @@ fade. Labels are underlined when the correspondence came from a mapping entry
 rather than being inferred, because the first question about a wrong arrow is
 always whether it was asserted or guessed.
 
-Colour says what happens to the token: cyan for one that travels with its text
+Color says what happens to the token: cyan for one that travels with its text
 intact however many copies it ends up as, yellow for one whose text changes,
 red for gone, green for new.
 """
@@ -47,16 +47,16 @@ UNKNOWN = "#7f8496"
 
 
 def link_color(op: Op, same_text: bool) -> str:
-    """Colour by what happens to the token, not by the name of the op.
+    """Color by what happens to the token, not by the name of the op.
 
     A clone whose copies keep their text is a move that happens twice — it
-    belongs with the moves. Only a genuine change of text earns its own colour,
+    belongs with the moves. Only a genuine change of text earns its own color,
     so scanning for yellow finds the morphs rather than every duplication.
 
     On a label that lists several counterparts, yellow is infectious: `1->2,4`
     goes yellow if *either* of those links changes the text, because the label
     is one claim about the whole split. The individual labels on the other side
-    each describe one link, so they stay coloured on their own terms — a split
+    each describe one link, so they stay colored on their own terms — a split
     into one same word and one different word reads yellow on the source, cyan
     on one destination and yellow on the other.
     """
@@ -173,7 +173,7 @@ def _side(code, links, color_of, manual, side, arrow, font_size):
         # wide over a cell that may be one, so neighbours would overlap on a
         # single row — `2->5,10` sitting on a lone `a` is six cells of text.
         row = 0.11 if token.index % 2 else -0.11
-        # Centre on the line rather than the token's ink: `(` and `x` have very
+        # Center on the line rather than the token's ink: `(` and `x` have very
         # different ink boxes, and a label riding the ink lands at a different
         # height for each one.
         label.move_to(
