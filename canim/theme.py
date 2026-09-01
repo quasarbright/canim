@@ -159,7 +159,18 @@ def open(name_or_path: str | Path) -> Theme:  # noqa: A001 — the editor calls 
 
     `Path.read_text` rather than the builtin `open`, which this shadows.
     """
-    return from_dict(json.loads(path_for(name_or_path).read_text()))
+    path = path_for(name_or_path)
+    if not path.exists() and path.parent == THEMES_DIR:
+        # A bare name that canim does not ship. Worth naming what it does,
+        # because the raw error points inside the installed package and reads
+        # as canim being broken rather than as the name being someone else's.
+        # This is what a theme moving out of the library looks like from here.
+        raise FileNotFoundError(
+            f"canim ships no theme named {str(name_or_path)!r}. "
+            f"Its own are {', '.join(discover())}. "
+            f"For any other theme, pass a path to its {SUFFIX} file."
+        )
+    return from_dict(json.loads(path.read_text()))
 
 
 def save(theme: Theme, name_or_path: str | Path | None = None) -> Path:

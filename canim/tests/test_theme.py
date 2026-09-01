@@ -144,3 +144,18 @@ def test_the_library_ships_only_its_own_themes():
     assert theme.discover() == [
         "monokai", "one-dark", "one-dark-slate", "pastel-evening", "solarized-dark",
     ]
+
+
+def test_an_unknown_bare_name_says_what_is_available(tmp_path):
+    # The raw error points inside the installed package, which reads as canim
+    # being broken rather than as the theme being someone else's. Two videos
+    # broke exactly this way when their palettes moved out of the library.
+    with pytest.raises(FileNotFoundError, match="ships no theme named 'tree-frog'"):
+        theme.open("tree-frog")
+    with pytest.raises(FileNotFoundError, match="one-dark-slate"):
+        theme.open("tree-frog")
+
+
+def test_a_missing_path_still_raises_the_plain_error(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        theme.open(tmp_path / "nope.theme.json")
