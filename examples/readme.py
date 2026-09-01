@@ -11,13 +11,14 @@ so the loop reads.
 
 from manim import *
 
-from canim import Code, CodeTransform, Kind, LISP, PYTHON, theme
+from canim import Code, CodeTransform, JAVASCRIPT, Kind, LISP, PYTHON, theme
 
 THEME = theme.ONE_DARK_SLATE
 config.background_color = THEME.background
 
 FONT_SIZE = 44
 HOLD = 0.9
+ARC = 0.7  # curves the moving glyphs, so two copies of one token visibly fan out
 
 
 def block(source: str, language=LISP) -> Code:
@@ -36,19 +37,45 @@ class Basic(Scene):
         self.wait(HOLD)
 
 
-class Mapping(Scene):
-    """One token becoming two, because the mapping says so."""
+# A macro call and what it expands to. Each argument is pasted into more
+# than one place, which is the case the automatic layers cannot cover: they
+# pair by text in source order, and there is only one `x` to go around.
+SWAP_USE = "(swap x y)"
+SWAP_EXPANDED = "(let ((tmp x))\n  (setf x y\n        y tmp))"
+
+
+class MappingWrong(Scene):
+    """The same expansion with no mapping — half the names appear from nowhere."""
 
     def construct(self):
-        before = block("(let ((tmp a))\n  (setf a tmp))")
-        after = block("(let ((g1 a))\n  (setf a g1))")
+        before = block(SWAP_USE)
+        after = block(SWAP_EXPANDED)
+        self.add(before)
+        self.wait(HOLD)
+        # Same arc and timing as `Mapping`, so the only difference between
+        # the two GIFs is the mapping itself.
+        self.play(CodeTransform(before, after, path_arc=ARC), run_time=2.2)
+        self.wait(HOLD * 1.4)
+
+
+class Mapping(Scene):
+    """One token becoming several, because the mapping says so."""
+
+    def construct(self):
+        before = block(SWAP_USE)
+        after = block(SWAP_EXPANDED)
         self.add(before)
         self.wait(HOLD)
         self.play(
-            CodeTransform(before, after, [(["tmp"], after.all("g1"))]),
-            run_time=1.6,
+            CodeTransform(
+                before,
+                after,
+                [(["x"], after.all("x")), (["y"], after.all("y"))],
+                path_arc=ARC,
+            ),
+            run_time=2.2,
         )
-        self.wait(HOLD)
+        self.wait(HOLD * 1.4)
 
 
 class Highlighting(Scene):
@@ -80,12 +107,17 @@ class Highlighting(Scene):
         self.wait(HOLD)
 
 
-class Python(Scene):
-    """Another language, and a longer rewrite."""
+class Languages(Scene):
+    """The same function in two languages.
+
+    Nothing here is asserted. Both `a`s and both `b`s pair correctly on their
+    own, because each appears the same number of times on both sides and in
+    the same order — which is exactly the condition the automatic layers need.
+    """
 
     def construct(self):
-        before = block("total = sum([f(x) for x in xs])", PYTHON)
-        after = block("total = sum(f(x) for x in xs)", PYTHON)
+        before = block("def add(a, b):\n    return a + b", PYTHON)
+        after = block("function add(a, b) {\n  return a + b;\n}", JAVASCRIPT)
         self.add(before)
         self.wait(HOLD)
         self.play(CodeTransform(before, after), run_time=1.6)

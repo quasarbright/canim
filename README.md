@@ -73,10 +73,22 @@ Lisp. Also accepted: `font`, `font_size`, `line_spacing`, `theme`.
 Code(source, PYTHON, font_size=28, theme=theme.MONOKAI)
 ```
 
-Nothing about a transform is Lisp-specific — dropping a comprehension's
-brackets is the same three layers doing the same work:
+Nothing about a transform is tied to one language, and the two blocks need
+not share one. The same function in Python and in JavaScript:
 
-![](docs/python.gif)
+```python
+before = Code("def add(a, b):\n    return a + b", PYTHON)
+after = Code("function add(a, b) {\n  return a + b;\n}", JAVASCRIPT)
+self.play(CodeTransform(before, after))
+```
+
+![](docs/languages.gif)
+
+Nothing is asserted here. Both `a`s and both `b`s find their counterparts on
+their own: each appears the same number of times on both sides and in the same
+order, which is the condition the automatic layers need. `def` fades out under
+`function`, the `:` under the `{`, and the `;` and `}` arrive with no
+counterpart.
 
 ## Transforms
 
@@ -97,20 +109,61 @@ Options:
 
 ## When the guess is wrong: mapping
 
-Matching is automatic. Where it guesses wrong, say what you meant — as a list
-of `(from, to)` pairs:
+Matching is automatic, and there is a whole class of transform it cannot get
+right on its own: anything that uses a token more than once. Expanding a macro
+call is the standard case, because a macro pastes each argument into several
+places.
+
+`(swap x y)` expands to a `let` that mentions `x` twice and `y` twice. Play
+that with no mapping and this is what you get:
+
+![](docs/mapping-wrong.gif)
+
+Watch the second `x` and the second `y`. They do not come from the call — they
+fade in from nothing, while the call's own `x` and `y` each fly to one slot and
+leave the other empty. The expansion reads as half substitution and half
+spontaneous generation.
+
+Nothing is wrong with the final frame. That is the trap: it is a perfectly
+correct picture of the expanded code, so the bug is invisible unless you watch
+the motion or read the correspondence:
+
+```
+destination
+--------------------------------
+  5 'x'          <- 2        move       ← came from the call
+ 10 'x'          <- ·        fade in    ← appeared from nowhere
+ 11 'y'          <- 3        move       ← came from the call
+ 12 'y'          <- ·        fade in    ← appeared from nowhere
+```
+
+The call has one `x` and the expansion needs two, so the greedy layer — which
+pairs by text in source order — runs out. Say what you meant instead:
 
 ```python
-before = Code("(let ((tmp a))\n  (setf a tmp))", LISP)
-after  = Code("(let ((g1 a))\n  (setf a g1))", LISP)
-self.play(CodeTransform(before, after, [(["tmp"], after.all("g1"))]))
+before = Code("(swap x y)", LISP)
+after = Code("(let ((tmp x))\n  (setf x y\n        y tmp))", LISP)
+
+self.play(CodeTransform(before, after, [
+    (["x"], after.all("x")),
+    (["y"], after.all("y")),
+]))
 ```
 
 ![](docs/mapping.gif)
 
-Without the mapping, `tmp` has no same-text partner: both copies would fade
-out while both `g1`s faded in. With it, the one token splits and travels to
-both places.
+Now each argument visibly splits and both copies travel to where the macro
+pasted them, which is what a substitution actually does. `tmp` still fades in,
+correctly — it is the one name in the expansion that did not come from the
+call.
+
+This is the same shape as the mapping in the macros video, `fun_pasted` in
+`2026/macros/main.py`: it asserts where the call's tokens land, for exactly
+this reason. There it matters twice over, because the name the macro
+introduces is `tmp` — and if the *caller* also has a `tmp`, the greedy layer
+will happily pair the user's with the macro's. That is the hygiene bug the
+video is about, and the mapping is what keeps the animation from telling the
+wrong story about it.
 
 Each side is a list of *refs*. Counts are counted in refs, not tokens, so a
 multi-token ref is one thing. That is how splits and merges are written:
