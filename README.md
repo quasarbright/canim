@@ -8,26 +8,28 @@ splits in two. A token with no counterpart fades.
 
 ```python
 from manim import Scene
-from canim import Code, CodeTransform, LISP
+from canim import Code, CodeTransform, PYTHON, JAVASCRIPT
 
-class Basic(Scene):
+class Languages(Scene):
     def construct(self):
-        before = Code("(swap a b)", LISP)
-        after = Code("(rotate a b c)", LISP)
+        before = Code("def add(a, b):\n    return a + b", PYTHON)
+        after = Code("function add(a, b) {\n  return a + b;\n}", JAVASCRIPT)
         self.add(before)
         self.play(CodeTransform(before, after))
 ```
 
-![](docs/basic.gif)
+![](docs/languages.gif)
 
-The parens and `a` and `b` slide to their new places, `swap` fades out where
-`rotate` fades in, and `c` fades in on its own. Nothing was said about which
-token is which — that is the matcher.
+`add`, the parameters, and the body slide to their new places; `def` fades out
+under `function` and the `:` under the `{`; the `;` and `}` arrive with no
+counterpart. Nothing was said about which token is which — that is the
+matcher. The two blocks are not even in the same language, which it also does
+not need to be told.
 
 Every GIF below is rendered from [`examples/readme.py`](examples/readme.py):
 
 ```sh
-manim examples/readme.py -qm --format=gif -r 960,320 Basic
+manim examples/readme.py -qm --format=gif -r 960,320 Languages
 ```
 
 ## Install
@@ -73,22 +75,8 @@ Lisp. Also accepted: `font`, `font_size`, `line_spacing`, `theme`.
 Code(source, PYTHON, font_size=28, theme=theme.MONOKAI)
 ```
 
-Nothing about a transform is tied to one language, and the two blocks need
-not share one. The same function in Python and in JavaScript:
-
-```python
-before = Code("def add(a, b):\n    return a + b", PYTHON)
-after = Code("function add(a, b) {\n  return a + b;\n}", JAVASCRIPT)
-self.play(CodeTransform(before, after))
-```
-
-![](docs/languages.gif)
-
-Nothing is asserted here. Both `a`s and both `b`s find their counterparts on
-their own: each appears the same number of times on both sides and in the same
-order, which is the condition the automatic layers need. `def` fades out under
-`function`, the `:` under the `{`, and the `;` and `}` arrive with no
-counterpart.
+Two blocks in a transform need not share a language, as the opening example
+shows — the lexer belongs to the block, not to the animation.
 
 ## Transforms
 
@@ -96,9 +84,18 @@ counterpart.
 will hold `dest` afterwards. You do not add `dest` yourself.
 
 ```python
+before = Code("(swap a b)", LISP)
+after = Code("(rotate a b c)", LISP)
+
 self.add(before)
 self.play(CodeTransform(before, after))
 ```
+
+![](docs/basic.gif)
+
+Three outcomes, and every token gets exactly one: the parens and `a` and `b`
+**move**, `swap` **fades out**, `rotate` and `c` **fade in**. Everything else
+in this README is those three, chosen differently.
 
 Options:
 
