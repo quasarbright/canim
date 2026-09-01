@@ -18,8 +18,17 @@ class Basic(Scene):
         self.play(CodeTransform(before, after))
 ```
 
+![](docs/basic.gif)
+
 The parens and `a` and `b` slide to their new places, `swap` fades out where
-`rotate` fades in, and `c` fades in on its own.
+`rotate` fades in, and `c` fades in on its own. Nothing was said about which
+token is which — that is the matcher.
+
+Every GIF below is rendered from [`examples/readme.py`](examples/readme.py):
+
+```sh
+manim examples/readme.py -qm --format=gif -r 960,320 Basic
+```
 
 ## Install
 
@@ -64,6 +73,11 @@ Lisp. Also accepted: `font`, `font_size`, `line_spacing`, `theme`.
 Code(source, PYTHON, font_size=28, theme=theme.MONOKAI)
 ```
 
+Nothing about a transform is Lisp-specific — dropping a comprehension's
+brackets is the same three layers doing the same work:
+
+![](docs/python.gif)
+
 ## Transforms
 
 `CodeTransform(source, dest)` — the scene should hold `source` beforehand and
@@ -87,13 +101,16 @@ Matching is automatic. Where it guesses wrong, say what you meant — as a list
 of `(from, to)` pairs:
 
 ```python
-before = Code("(let ((tmp a)) (setf a b))", LISP)
-after  = Code("(let ((g1 a))  (setf a b))", LISP)
-self.play(CodeTransform(before, after, [(["tmp"], ["g1"])]))
+before = Code("(let ((tmp a))\n  (setf a tmp))", LISP)
+after  = Code("(let ((g1 a))\n  (setf a g1))", LISP)
+self.play(CodeTransform(before, after, [(["tmp"], after.all("g1"))]))
 ```
 
-Without the mapping, `tmp` has no same-text partner and would fade out while
-`g1` faded in. With it, the token travels.
+![](docs/mapping.gif)
+
+Without the mapping, `tmp` has no same-text partner: both copies would fade
+out while both `g1`s faded in. With it, the one token splits and travels to
+both places.
 
 Each side is a list of *refs*. Counts are counted in refs, not tokens, so a
 multi-token ref is one thing. That is how splits and merges are written:
@@ -142,19 +159,27 @@ it happens to be line-broken on screen.
 everything you already do in manim works:
 
 ```python
-self.play(code.select(code.all("swap")).animate.set_color(YELLOW))
-self.play(code.select(code.nth("b", 1)).animate.set_color(RED))
+code = Code("(defmacro swap (a b)\n  `(let ((tmp ,a))\n     (setf ,a ,b)))", LISP)
 
-paren = code.nth("(", 0)
-self.play(code.select([paren, paren.partner]).animate.set_color(GREEN))
+# every `a` and `b`, wherever they appear — including under a comma
+self.play(code.select(code.all("a") + code.all("b")).animate.set_color(GOLD))
+
+# a delimiter and the one that balances it
+opener = code.nth("(", 0)
+self.play(code.select([opener, opener.partner]).animate.set_color(RED))
 ```
 
 For geometry rather than a tween, `.boxes()` draws a rectangle around each
 contiguous run:
 
 ```python
-self.play(Create(code.select(code.all("a") + code.all("b")).boxes()))
+self.play(Create(code.select(code.all("tmp")).boxes()))
 ```
+
+All three together — every `a` and `b` recolored (including the ones under a
+comma), then a paren and its partner, then a box:
+
+![](docs/highlighting.gif)
 
 Because a box is a real mobject over real glyphs, it can be attached to what
 it marks and moved along with it, instead of being re-drawn every beat.
@@ -287,6 +312,14 @@ background and they follow; `surface` does not.
 or `canim-theme-editor`. It opens a browser at <http://127.0.0.1:8765>. It is
 a local server plus a page — nothing is uploaded, and it reads and writes only
 files you point it at.
+
+![The theme editor](docs/theme-editor.png)
+
+The interface is achromatic on purpose. You cannot judge a palette inside a
+colored one — any hue in the chrome sits next to the swatches and
+contaminates the comparison — so every pixel of it is a neutral gray and the
+only color on screen is the theme being edited. Even the warnings signal with
+a ⚠️ glyph rather than an accent color.
 
 ```
 --port 8765           what to listen on

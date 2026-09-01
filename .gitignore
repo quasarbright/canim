@@ -160,3 +160,6 @@ cython_debug/
 
 # manim output from running the examples
 media/
+
+# manim output from rendering the examples
+docs/_build/
