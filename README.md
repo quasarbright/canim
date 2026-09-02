@@ -121,13 +121,19 @@ Options:
 ## When the guess is wrong: mapping
 
 Matching is automatic, and there is a whole class of transform it cannot get
-right on its own: anything that uses a token more than once, or transforms one token to another that has different text content. Expanding a macro
-call is the standard case, because a macro pastes each argument into several
-places.
+right on its own: anything that uses a token more than once, or transforms one
+token to another that has different text content.
 
-Inlining a call is the everyday case. `hypot(dx, dy)` becomes its own body,
-which uses each argument twice. Play that with no mapping and this is what you
-get:
+Inlining a call is the everyday example. `hypot(dx, dy)` becomes its own body,
+which uses each argument twice:
+
+```python
+before = Code("dist = hypot(dx, dy)", PYTHON)
+after = Code("dist = sqrt(dx * dx + dy * dy)", PYTHON)
+
+self.add(before)
+self.play(CodeTransform(before, after))
+```
 
 ![](docs/mapping-wrong.gif)
 
@@ -150,12 +156,10 @@ destination
 ```
 
 The call has one `dx` and the body needs two, so the greedy layer — which
-pairs by text in source order — runs out. Say what you meant instead:
+pairs by text in source order — runs out. Say what you meant instead: the same
+two blocks, with a third argument to `CodeTransform`.
 
 ```python
-before = Code("dist = hypot(dx, dy)", PYTHON)
-after = Code("dist = sqrt(dx * dx + dy * dy)", PYTHON)
-
 self.play(CodeTransform(before, after, [
     (["dx"], after.all("dx")),
     (["dy"], after.all("dy")),
