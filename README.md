@@ -51,6 +51,8 @@ Contents:
   - [Code blocks](#code-blocks)
   - [Transforms](#transforms)
   - [When the guess is wrong: mapping](#when-the-guess-is-wrong-mapping)
+    - [Partners come along](#partners-come-along)
+    - [Name the syntax, not the index](#name-the-syntax-not-the-index)
   - [Naming tokens: refs](#naming-tokens-refs)
   - [Coloring and highlighting: selections](#coloring-and-highlighting-selections)
   - [Cloning](#cloning)
@@ -178,9 +180,49 @@ self.play(CodeTransform(before, after, [
 
 Now each call keeps its own brackets and carries them to its new line intact.
 
-Only the *openers* are named. A delimiter's partner is forced to follow it, so
-all three closers come along without being asked for — pinning six would have
-been six chances to typo an index.
+That mapping is correct and horrible. It counts parens in two blocks, and
+`nth("(", 1) → nth("(", 0)` tells a reader nothing about what it means. Two
+things make it better.
+
+### Partners come along
+
+Only *openers* are named above, and six tokens are fixed. A delimiter's partner
+is forced to follow it, so naming `(` settles its `)` too. `.partner` is the ref
+for the other half when you want it in your own hands:
+
+```python
+opener = before.nth("(", 0)
+opener.partner            # the `)` that closes it
+```
+
+It is what the selections example above uses to color a bracket pair, and in a
+mapping it is how you would send a closer somewhere its opener does not go.
+Here you never need it — which is the point, and why three entries cover six
+parens instead of six entries covering six parens.
+
+### Name the syntax, not the index
+
+Better still: a ref may span several tokens, so instead of picking brackets
+apart you can name the whole call and say where it goes.
+
+```python
+self.play(CodeTransform(before, after, [
+    (["result = f"], ["result = f"]),
+    (["g(x)"], ["g(x)"]),
+    (["h(x)"], ["h(x)"]),
+], path_arc=0.7))
+```
+
+Same correspondence, no indices anywhere, and each line says a true thing about
+the transformation: this call became that call. `"g(x)"` is four tokens
+traveling as one group, brackets included, so the rotation cannot happen.
+
+Not quite the same *animation*, though: a group moves as one unit, so those
+four glyphs travel in lockstep instead of being staggered by `lag` the way four
+separately-matched tokens are. Every token still ends up in the same place.
+
+Both `"g(x)"` entries are bare strings — the first token run with that text in
+each block — which is why neither side needs an `after.` prefix here.
 
 Duplication is the other half of this. A token used more than once in the
 result has no chance at all: only one of the copies can be the same-text

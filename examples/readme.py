@@ -84,10 +84,11 @@ class MappingWrong(Scene):
 
 
 class Mapping(Scene):
-    """Four entries: the assignment, and each call's parens.
+    """Three entries, each naming a piece of syntax rather than an index.
 
-    Only the openers are named. A delimiter's partner is forced to follow it,
-    so all three closers come along without being asked for.
+    The README works up to this from a version that pins parens by number.
+    Both produce this exact correspondence; this one says what it means, and
+    a multi-token ref carries its brackets with it so they cannot rotate.
     """
 
     def construct(self):
@@ -100,10 +101,9 @@ class Mapping(Scene):
                 before,
                 after,
                 [
-                    ([before.nth("=", 0)], [after.nth("=", 2)]),  # the assignment
-                    ([before.nth("(", 0)], [after.nth("(", 2)]),  # f's parens
-                    ([before.nth("(", 1)], [after.nth("(", 0)]),  # g's
-                    ([before.nth("(", 2)], [after.nth("(", 1)]),  # h's
+                    (["result = f"], ["result = f"]),
+                    (["g(x)"], ["g(x)"]),
+                    (["h(x)"], ["h(x)"]),
                 ],
                 path_arc=ARC,
             ),
