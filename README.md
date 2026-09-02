@@ -102,11 +102,9 @@ shows — the lexer belongs to the block, not to the animation.
 `CodeTransform(source, dest)` — the scene should hold `source` beforehand and
 will hold `dest` afterwards. You do not add `dest` yourself.
 
-Naming the subexpressions — one real compiler pass, A-normal form:
-
 ```python
-before = Code("result = f(g(x), h(x))", PYTHON)
-after = Code("a = g(x)\nb = h(x)\nresult = f(a, b)", PYTHON)
+before = Code("root = x ** 0.5", PYTHON)
+after = Code("root = math.sqrt(x)", PYTHON)
 
 self.add(before)
 self.play(CodeTransform(before, after))
@@ -114,14 +112,10 @@ self.play(CodeTransform(before, after))
 
 ![](docs/basic.gif)
 
-Three outcomes, and every token gets exactly one. `g`, `h` and both `x`s
-**move** out of the nest onto their own lines; `f` and `result` **move** down
-to the last one; the new names `a` and `b` **fade in**. Nothing fades out,
-because nothing was thrown away. Everything else in this README is those three
+Three outcomes, and every token gets exactly one: `root`, `=` and `x` **move**
+— `x` traveling into the call — while `**` and `0.5` **fade out** and
+`math.sqrt(` and `)` **fade in**. Everything else in this README is those three
 outcomes, chosen differently.
-
-No mapping, and none needed: each name occurs the same number of times on both
-sides and in the same order.
 
 Options:
 
@@ -136,17 +130,12 @@ Matching is automatic. It goes wrong whenever a token's real counterpart is
 not the one that shares its text and its position — because position among
 same-text tokens is all the greedy layer has to go on.
 
-Rewriting a C-style `for` as a `while` is a good place to see it. In
-JavaScript this is an exact rewrite: the header holds an init, a test and an
-increment, and the `while` form just puts each one where it runs.
+Naming the subexpressions — A-normal form, one real compiler pass — is a good
+place to see it:
 
 ```python
-before = Code("for (let i = 0; i < n; i++) {\n  total += i\n}", JAVASCRIPT)
-after = Code("let i = 0\nwhile (i < n) {\n  total += i\n  i++\n}", JAVASCRIPT)
-
-# only so the two can be told apart on screen
-before.select(before.nth("i", 2)).set_color(GOLD)   # the header's increment
-before.select(before.nth("i", 3)).set_color(GREEN)  # the body's use
+before = Code("result = f(g(x), h(x))", PYTHON)
+after = Code("a = g(x)\nb = h(x)\nresult = f(a, b)", PYTHON)
 
 self.add(before)
 self.play(CodeTransform(before, after, path_arc=0.7))
@@ -154,39 +143,44 @@ self.play(CodeTransform(before, after, path_arc=0.7))
 
 ![](docs/mapping-wrong.gif)
 
-Follow the gold one. The increment's `i` should end up at the bottom of the
-loop body, next to the `++` it belongs to — instead it flies into `total += i`,
-and the green one, which was already sitting where it needed to be, is thrown
-down to the increment. They swap.
+The names are all fine — `f`, `g`, `h`, both `x`s and `result` go exactly where
+they should. It is the punctuation that comes apart. The three calls trade
+parens with each other, so `g(x)` and `h(x)` are assembled on screen from
+brackets that arrive from the wrong call, and the single `=` flies to the
+*first* new line rather than to the assignment it actually belongs to.
 
 Nothing appears, nothing disappears, and the final frame is exactly right.
-That is the trap: the count is right, the picture is right, and only the routes
-are wrong. `i` occurs four times on each side, but not in the same order —
-source is init, test, increment, body; destination is init, test, body,
-increment. The first two pair correctly and the last two cross:
+That is the trap: the picture is correct and only the routes are wrong. There
+are three `(` on each side and position in source order is all the greedy layer
+has to go on, so they rotate:
 
 ```
 source
 --------------------------------
- 11 'i'          -> 13       move    ← the increment, into the body
- 12 '++'         -> 15       move    ← its `++`, correctly, without it
- 17 'i'          -> 14       move    ← the body, out to the increment
+  1 '='          -> 1        move    ← `a =`, not `result =`
+  3 '('          -> 3        move    ← f's paren, landing on g
+  5 '('          -> 9        move    ← g's, landing on h
+ 10 '('          -> 15       move    ← h's, landing on f
 ```
 
-Say which is which. The same two blocks, with a third argument to
-`CodeTransform`:
+Say which is which:
 
 ```python
 self.play(CodeTransform(before, after, [
-    ([before.nth("i", 2)], [after.nth("i", 3)]),   # the increment
-    ([before.nth("i", 3)], [after.nth("i", 2)]),   # the body
+    ([before.nth("=", 0)], [after.nth("=", 2)]),   # the assignment
+    ([before.nth("(", 0)], [after.nth("(", 2)]),   # f's parens
+    ([before.nth("(", 1)], [after.nth("(", 0)]),   # g's
+    ([before.nth("(", 2)], [after.nth("(", 1)]),   # h's
 ], path_arc=0.7))
 ```
 
 ![](docs/mapping.gif)
 
-Now the gold `i` rides down with its `++` and the green one stays put, which is
-what the rewrite actually does to them.
+Now each call keeps its own brackets and carries them to its new line intact.
+
+Only the *openers* are named. A delimiter's partner is forced to follow it, so
+all three closers come along without being asked for — pinning six would have
+been six chances to typo an index.
 
 Duplication is the other half of this. A token used more than once in the
 result has no chance at all: only one of the copies can be the same-text

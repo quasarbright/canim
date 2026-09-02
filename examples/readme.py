@@ -46,66 +46,53 @@ class Languages(Scene):
 
 
 class Basic(Scene):
-    """Naming the subexpressions — A-normal form, one compiler pass.
-
-    Unaided and correct. The three paren pairs do rotate among themselves,
-    which is invisible: they are identical glyphs landing in the right places.
-    """
+    """All three outcomes, and the automatic layers get every one of them."""
 
     def construct(self):
-        before = block("result = f(g(x), h(x))")
-        after = block("a = g(x)\nb = h(x)\nresult = f(a, b)")
+        before = block("root = x ** 0.5")
+        after = block("root = math.sqrt(x)")
         self.add(before)
         self.wait(HOLD)
-        self.play(CodeTransform(before, after), run_time=1.8)
+        self.play(CodeTransform(before, after), run_time=1.6)
         self.wait(HOLD)
 
 
-# A C-style `for` and the same loop as a `while`. In JavaScript this rewrite
-# is exact: the header really does hold an init, a test and an increment, and
-# the while form just puts each one where it runs.
+# Naming the subexpressions — A-normal form, one real compiler pass.
 #
-# `i` appears four times on both sides, so nothing is duplicated — but the
-# order differs. Source: init, test, increment, body. Destination: init, test,
-# body, increment. The greedy layer pairs by position among same-text tokens,
-# so the last two cross.
-FOR_LOOP = "for (let i = 0; i < n; i++) {\n  total += i\n}"
-WHILE_LOOP = "let i = 0\nwhile (i < n) {\n  total += i\n  i++\n}"
-
-
-def mark(code: Code) -> None:
-    """Color the two `i` tokens that trade places.
-
-    Only so they can be followed. Coloring the *source* rather than the
-    result is the point: the marks ride their glyphs through the transform,
-    so where each one lands is the answer rather than a claim about it.
-    """
-    code.select(code.nth("i", 2)).set_color(GOLD)   # the header's increment
-    code.select(code.nth("i", 3)).set_color(GREEN)  # the body's use
+# Nothing is duplicated: every name occurs as often on one side as the other.
+# What the automatic layers get wrong is *which* same-text token is which.
+# There are three `(` in each block and one `=` in the source against three in
+# the result, and position in source order is all the greedy layer has to go
+# on, so the parens rotate between the three calls and the assignment lands on
+# the first new line instead of the last.
+ANF_NESTED = "result = f(g(x), h(x))"
+ANF_NAMED = "a = g(x)\nb = h(x)\nresult = f(a, b)"
 
 
 class MappingWrong(Scene):
-    """No mapping: the increment's `i` and the body's `i` trade places."""
+    """No mapping: the parens swap calls and the `=` picks the wrong line."""
 
     def construct(self):
-        before = block(FOR_LOOP, JAVASCRIPT)
-        after = block(WHILE_LOOP, JAVASCRIPT)
-        mark(before)
+        before = block(ANF_NESTED)
+        after = block(ANF_NAMED)
         self.add(before)
         self.wait(HOLD)
-        # Same marks, arc and timing as `Mapping`, so the only difference
-        # between the two GIFs is the mapping itself.
-        self.play(CodeTransform(before, after, path_arc=ARC), run_time=2.4)
+        # Same arc and timing as `Mapping`, so the only difference between
+        # the two GIFs is the mapping itself.
+        self.play(CodeTransform(before, after, path_arc=ARC), run_time=2.2)
         self.wait(HOLD * 1.4)
 
 
 class Mapping(Scene):
-    """Two entries, saying which `i` is which."""
+    """Four entries: the assignment, and each call's parens.
+
+    Only the openers are named. A delimiter's partner is forced to follow it,
+    so all three closers come along without being asked for.
+    """
 
     def construct(self):
-        before = block(FOR_LOOP, JAVASCRIPT)
-        after = block(WHILE_LOOP, JAVASCRIPT)
-        mark(before)
+        before = block(ANF_NESTED)
+        after = block(ANF_NAMED)
         self.add(before)
         self.wait(HOLD)
         self.play(
@@ -113,12 +100,14 @@ class Mapping(Scene):
                 before,
                 after,
                 [
-                    ([before.nth("i", 2)], [after.nth("i", 3)]),  # the increment
-                    ([before.nth("i", 3)], [after.nth("i", 2)]),  # the body
+                    ([before.nth("=", 0)], [after.nth("=", 2)]),  # the assignment
+                    ([before.nth("(", 0)], [after.nth("(", 2)]),  # f's parens
+                    ([before.nth("(", 1)], [after.nth("(", 0)]),  # g's
+                    ([before.nth("(", 2)], [after.nth("(", 1)]),  # h's
                 ],
                 path_arc=ARC,
             ),
-            run_time=2.4,
+            run_time=2.2,
         )
         self.wait(HOLD * 1.4)
 
