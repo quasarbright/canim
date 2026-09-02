@@ -102,9 +102,11 @@ shows — the lexer belongs to the block, not to the animation.
 `CodeTransform(source, dest)` — the scene should hold `source` beforehand and
 will hold `dest` afterwards. You do not add `dest` yourself.
 
+Naming the subexpressions — one real compiler pass, A-normal form:
+
 ```python
-before = Code("print(msg)", PYTHON)
-after = Code("log.info(msg)", PYTHON)
+before = Code("result = f(g(x), h(x))", PYTHON)
+after = Code("a = g(x)\nb = h(x)\nresult = f(a, b)", PYTHON)
 
 self.add(before)
 self.play(CodeTransform(before, after))
@@ -112,9 +114,14 @@ self.play(CodeTransform(before, after))
 
 ![](docs/basic.gif)
 
-Three outcomes, and every token gets exactly one: the parens and `msg`
-**move**, `print` **fades out**, `log`, `.` and `info` **fade in**. Everything
-else in this README is those three, chosen differently.
+Three outcomes, and every token gets exactly one. `g`, `h` and both `x`s
+**move** out of the nest onto their own lines; `f` and `result` **move** down
+to the last one; the new names `a` and `b` **fade in**. Nothing fades out,
+because nothing was thrown away. Everything else in this README is those three
+outcomes, chosen differently.
+
+No mapping, and none needed: each name occurs the same number of times on both
+sides and in the same order.
 
 Options:
 
@@ -125,16 +132,21 @@ Options:
 
 ## When the guess is wrong: mapping
 
-Matching is automatic, and there is a whole class of transform it cannot get
-right on its own: anything that uses a token more than once, or transforms one
-token to another that has different text content.
+Matching is automatic. It goes wrong whenever a token's real counterpart is
+not the one that shares its text and its position — because position among
+same-text tokens is all the greedy layer has to go on.
 
-Inlining a call is the everyday example. `hypot(dx, dy)` becomes its own body,
-which uses each argument twice:
+Rewriting a C-style `for` as a `while` is a good place to see it. In
+JavaScript this is an exact rewrite: the header holds an init, a test and an
+increment, and the `while` form just puts each one where it runs.
 
 ```python
-before = Code("dist = hypot(dx, dy)", PYTHON)
-after = Code("dist = sqrt(dx * dx + dy * dy)", PYTHON)
+before = Code("for (let i = 0; i < n; i++) {\n  total += i\n}", JAVASCRIPT)
+after = Code("let i = 0\nwhile (i < n) {\n  total += i\n  i++\n}", JAVASCRIPT)
+
+# only so the two can be told apart on screen
+before.select(before.nth("i", 2)).set_color(GOLD)   # the header's increment
+before.select(before.nth("i", 3)).set_color(GREEN)  # the body's use
 
 self.add(before)
 self.play(CodeTransform(before, after, path_arc=0.7))
@@ -142,47 +154,50 @@ self.play(CodeTransform(before, after, path_arc=0.7))
 
 ![](docs/mapping-wrong.gif)
 
-Watch the second `dx` and the second `dy`. They do not come from the call —
-they fade in from nothing, while the call's own arguments each fly to one slot
-and leave the other empty. The substitution reads as half real and half
-spontaneous generation.
+Follow the gold one. The increment's `i` should end up at the bottom of the
+loop body, next to the `++` it belongs to — instead it flies into `total += i`,
+and the green one, which was already sitting where it needed to be, is thrown
+down to the increment. They swap.
 
-Nothing is wrong with the final frame. That is the trap: it is a perfectly
-correct picture of the expanded code, so the bug is invisible unless you watch
-the motion or read the correspondence:
+Nothing appears, nothing disappears, and the final frame is exactly right.
+That is the trap: the count is right, the picture is right, and only the routes
+are wrong. `i` occurs four times on each side, but not in the same order —
+source is init, test, increment, body; destination is init, test, body,
+increment. The first two pair correctly and the last two cross:
 
 ```
-destination
+source
 --------------------------------
-  4 'dx'         <- 4        move       ← came from the call
-  6 'dx'         <- ·        fade in    ← appeared from nowhere
-  8 'dy'         <- 6        move       ← came from the call
- 10 'dy'         <- ·        fade in    ← appeared from nowhere
+ 11 'i'          -> 13       move    ← the increment, into the body
+ 12 '++'         -> 15       move    ← its `++`, correctly, without it
+ 17 'i'          -> 14       move    ← the body, out to the increment
 ```
 
-The call has one `dx` and the body needs two, so the greedy layer — which
-pairs by text in source order — runs out. Say what you meant instead: the same
-two blocks, with a third argument to `CodeTransform`.
+Say which is which. The same two blocks, with a third argument to
+`CodeTransform`:
 
 ```python
 self.play(CodeTransform(before, after, [
-    (["dx"], after.all("dx")),
-    (["dy"], after.all("dy")),
+    ([before.nth("i", 2)], [after.nth("i", 3)]),   # the increment
+    ([before.nth("i", 3)], [after.nth("i", 2)]),   # the body
 ], path_arc=0.7))
 ```
 
 ![](docs/mapping.gif)
 
-Now each argument visibly splits and both copies travel to where the body uses
-them, which is what a substitution actually does.
+Now the gold `i` rides down with its `++` and the green one stays put, which is
+what the rewrite actually does to them.
 
-Macro expansion is the same shape, and worse — a macro also introduces names
-of its own. The mapping in the macros video, `fun_pasted` in
-`2026/macros/main.py`, asserts where the call's tokens land for exactly this
-reason. There it matters twice over: the name the macro introduces is `tmp`,
-so if the *caller* also has a `tmp`, the greedy layer will happily pair the
-user's with the macro's. That is the hygiene bug the video is about, and the
-mapping is what keeps the animation from telling the wrong story about it.
+Duplication is the other half of this. A token used more than once in the
+result has no chance at all: only one of the copies can be the same-text
+partner, and the rest fade in from nothing. Macro expansion is that case in its
+purest form — every argument pasted into several places — and the mapping in
+the macros video, `fun_pasted` in `2026/macros/main.py`, exists for exactly
+that reason. It matters twice over there, because the name the macro
+introduces is `tmp`: if the *caller* also has a `tmp`, the greedy layer will
+happily pair the user's with the macro's. That is the hygiene bug the video is
+about, and the mapping is what keeps the animation from telling the wrong story
+about it.
 
 Each side is a list of *refs*. Counts are counted in refs, not tokens, so a
 multi-token ref is one thing. That is how splits and merges are written:

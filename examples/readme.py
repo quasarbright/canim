@@ -46,54 +46,79 @@ class Languages(Scene):
 
 
 class Basic(Scene):
-    """All three outcomes in one line: move, fade out, fade in."""
+    """Naming the subexpressions — A-normal form, one compiler pass.
+
+    Unaided and correct. The three paren pairs do rotate among themselves,
+    which is invisible: they are identical glyphs landing in the right places.
+    """
 
     def construct(self):
-        before = block("print(msg)")
-        after = block("log.info(msg)")
+        before = block("result = f(g(x), h(x))")
+        after = block("a = g(x)\nb = h(x)\nresult = f(a, b)")
         self.add(before)
         self.wait(HOLD)
-        self.play(CodeTransform(before, after), run_time=1.6)
+        self.play(CodeTransform(before, after), run_time=1.8)
         self.wait(HOLD)
 
 
-# A call, and the same thing with the call inlined. Each argument is used
-# twice in the result, which is the case the automatic layers cannot cover:
-# they pair by text in source order, and there is only one `dx` to go around.
-INLINE_CALL = "dist = hypot(dx, dy)"
-INLINE_BODY = "dist = sqrt(dx * dx + dy * dy)"
+# A C-style `for` and the same loop as a `while`. In JavaScript this rewrite
+# is exact: the header really does hold an init, a test and an increment, and
+# the while form just puts each one where it runs.
+#
+# `i` appears four times on both sides, so nothing is duplicated — but the
+# order differs. Source: init, test, increment, body. Destination: init, test,
+# body, increment. The greedy layer pairs by position among same-text tokens,
+# so the last two cross.
+FOR_LOOP = "for (let i = 0; i < n; i++) {\n  total += i\n}"
+WHILE_LOOP = "let i = 0\nwhile (i < n) {\n  total += i\n  i++\n}"
+
+
+def mark(code: Code) -> None:
+    """Color the two `i` tokens that trade places.
+
+    Only so they can be followed. Coloring the *source* rather than the
+    result is the point: the marks ride their glyphs through the transform,
+    so where each one lands is the answer rather than a claim about it.
+    """
+    code.select(code.nth("i", 2)).set_color(GOLD)   # the header's increment
+    code.select(code.nth("i", 3)).set_color(GREEN)  # the body's use
 
 
 class MappingWrong(Scene):
-    """The same inlining with no mapping — half the names appear from nowhere."""
+    """No mapping: the increment's `i` and the body's `i` trade places."""
 
     def construct(self):
-        before = block(INLINE_CALL)
-        after = block(INLINE_BODY)
+        before = block(FOR_LOOP, JAVASCRIPT)
+        after = block(WHILE_LOOP, JAVASCRIPT)
+        mark(before)
         self.add(before)
         self.wait(HOLD)
-        # Same arc and timing as `Mapping`, so the only difference between
-        # the two GIFs is the mapping itself.
-        self.play(CodeTransform(before, after, path_arc=ARC), run_time=2.2)
+        # Same marks, arc and timing as `Mapping`, so the only difference
+        # between the two GIFs is the mapping itself.
+        self.play(CodeTransform(before, after, path_arc=ARC), run_time=2.4)
         self.wait(HOLD * 1.4)
 
 
 class Mapping(Scene):
-    """One token becoming several, because the mapping says so."""
+    """Two entries, saying which `i` is which."""
 
     def construct(self):
-        before = block(INLINE_CALL)
-        after = block(INLINE_BODY)
+        before = block(FOR_LOOP, JAVASCRIPT)
+        after = block(WHILE_LOOP, JAVASCRIPT)
+        mark(before)
         self.add(before)
         self.wait(HOLD)
         self.play(
             CodeTransform(
                 before,
                 after,
-                [(["dx"], after.all("dx")), (["dy"], after.all("dy"))],
+                [
+                    ([before.nth("i", 2)], [after.nth("i", 3)]),  # the increment
+                    ([before.nth("i", 3)], [after.nth("i", 2)]),  # the body
+                ],
                 path_arc=ARC,
             ),
-            run_time=2.2,
+            run_time=2.4,
         )
         self.wait(HOLD * 1.4)
 
