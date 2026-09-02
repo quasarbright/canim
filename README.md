@@ -165,7 +165,34 @@ source
  10 '('          -> 15       move    ← h's, landing on f
 ```
 
-Say which is which:
+Say which is which. Six brackets are misplaced, so name all six — and rather
+than counting closers separately, ask each opener for the one that balances it:
+
+```python
+self.play(CodeTransform(before, after, [
+    ([before.nth("=", 0)], [after.nth("=", 2)]),                    # the assignment
+    ([before.nth("(", 0)], [after.nth("(", 2)]),                    # f's parens
+    ([before.nth("(", 0).partner], [after.nth("(", 2).partner]),
+    ([before.nth("(", 1)], [after.nth("(", 0)]),                    # g's
+    ([before.nth("(", 1).partner], [after.nth("(", 0).partner]),
+    ([before.nth("(", 2)], [after.nth("(", 1)]),                    # h's
+    ([before.nth("(", 2).partner], [after.nth("(", 1).partner]),
+], path_arc=0.7))
+```
+
+`.partner` is the `)` that closes a given `(` — it is what the selections
+example above uses to color a bracket pair, and it saves counting a second
+kind of delimiter here.
+
+![](docs/mapping.gif)
+
+Now each call keeps its own brackets and carries them to its new line intact.
+That works, and it is horrible. Two things make it shorter.
+
+### Partners come along
+
+Delete every `.partner` line. A delimiter's partner is *forced* to follow it,
+so naming an opener settles its closer whether you say so or not:
 
 ```python
 self.play(CodeTransform(before, after, [
@@ -178,27 +205,11 @@ self.play(CodeTransform(before, after, [
 
 ![](docs/mapping.gif)
 
-Now each call keeps its own brackets and carries them to its new line intact.
-
-That mapping is correct and horrible. It counts parens in two blocks, and
-`nth("(", 1) → nth("(", 0)` tells a reader nothing about what it means. Two
-things make it better.
-
-### Partners come along
-
-Only *openers* are named above, and six tokens are fixed. A delimiter's partner
-is forced to follow it, so naming `(` settles its `)` too. `.partner` is the ref
-for the other half when you want it in your own hands:
-
-```python
-opener = before.nth("(", 0)
-opener.partner            # the `)` that closes it
-```
-
-It is what the selections example above uses to color a bracket pair, and in a
-mapping it is how you would send a closer somewhere its opener does not go.
-Here you never need it — which is the point, and why three entries cover six
-parens instead of six entries covering six parens.
+The same image as above, and not by editorial laziness: the two renders come
+out pixel-identical, which is what "forced" means. Four entries instead of
+seven. `.partner` is still there for when you want a closer in your own hands
+— to select it, or to send it somewhere its opener does not go — but a mapping
+rarely needs it.
 
 ### Name the syntax, not the index
 
@@ -213,13 +224,16 @@ self.play(CodeTransform(before, after, [
 ], path_arc=0.7))
 ```
 
+![](docs/mapping-named.gif)
+
 Same correspondence, no indices anywhere, and each line says a true thing about
 the transformation: this call became that call. `"g(x)"` is four tokens
 traveling as one group, brackets included, so the rotation cannot happen.
 
-Not quite the same *animation*, though: a group moves as one unit, so those
-four glyphs travel in lockstep instead of being staggered by `lag` the way four
-separately-matched tokens are. Every token still ends up in the same place.
+This one is *not* the same render as the two above, which is why it is shown
+separately. A group moves as one unit, so `g(x)`'s four glyphs travel in
+lockstep instead of being staggered by `lag` the way four separately-matched
+tokens are. Every token still lands in the same place.
 
 Both `"g(x)"` entries are bare strings — the first token run with that text in
 each block — which is why neither side needs an `after.` prefix here.
@@ -331,10 +345,21 @@ one while the other stays put, and the copy reads as having lifted off the
 original.
 
 ```python
+code = Code("root = x ** 0.5", PYTHON)
+self.add(code)
+
 copy = code.clone()
 self.add(copy)
-self.play(copy.animate.shift(DOWN))
+self.play(copy.animate.shift(DOWN * 1.1))
+
+rewritten = Code("root = math.sqrt(x)", PYTHON).shift(DOWN * 1.1)
+self.play(CodeTransform(copy, rewritten))
 ```
+
+![](docs/cloning.gif)
+
+The original is still there and untouched, so the two can be compared side by
+side afterwards.
 
 Rebuilding from the constructor arguments instead would lose those later
 changes; a scaled block cloned itself back to full size and sat on top of the

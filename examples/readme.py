@@ -83,33 +83,80 @@ class MappingWrong(Scene):
         self.wait(HOLD * 1.4)
 
 
-class Mapping(Scene):
-    """Three entries, each naming a piece of syntax rather than an index.
+def mapped(scene, mapping) -> None:
+    """The ANF transform under a given mapping, staged identically."""
+    before = block(ANF_NESTED)
+    after = block(ANF_NAMED)
+    scene.add(before)
+    scene.wait(HOLD)
+    scene.play(
+        CodeTransform(before, after, mapping(before, after), path_arc=ARC),
+        run_time=2.2,
+    )
+    scene.wait(HOLD * 1.4)
 
-    The README works up to this from a version that pins parens by number.
-    Both produce this exact correspondence; this one says what it means, and
-    a multi-token ref carries its brackets with it so they cannot rotate.
+
+class Mapping(Scene):
+    """Every bracket named, closers included, via `.partner`.
+
+    Correct, and more than is needed — the next scene deletes half of it.
     """
 
     def construct(self):
-        before = block(ANF_NESTED)
-        after = block(ANF_NAMED)
-        self.add(before)
+        mapped(self, lambda b, a: [
+            ([b.nth("=", 0)], [a.nth("=", 2)]),
+            ([b.nth("(", 0)], [a.nth("(", 2)]),
+            ([b.nth("(", 0).partner], [a.nth("(", 2).partner]),
+            ([b.nth("(", 1)], [a.nth("(", 0)]),
+            ([b.nth("(", 1).partner], [a.nth("(", 0).partner]),
+            ([b.nth("(", 2)], [a.nth("(", 1)]),
+            ([b.nth("(", 2).partner], [a.nth("(", 1).partner]),
+        ])
+
+
+class MappingOpeners(Scene):
+    """The same, with the closers left to the partner rule."""
+
+    def construct(self):
+        mapped(self, lambda b, a: [
+            ([b.nth("=", 0)], [a.nth("=", 2)]),
+            ([b.nth("(", 0)], [a.nth("(", 2)]),
+            ([b.nth("(", 1)], [a.nth("(", 0)]),
+            ([b.nth("(", 2)], [a.nth("(", 1)]),
+        ])
+
+
+class MappingNamed(Scene):
+    """Multi-token refs: name the syntax rather than count delimiters.
+
+    Same correspondence as the two above, but not the same animation — a
+    multi-token ref is one group, so its four glyphs travel in lockstep
+    instead of being staggered by `lag`.
+    """
+
+    def construct(self):
+        mapped(self, lambda b, a: [
+            (["result = f"], ["result = f"]),
+            (["g(x)"], ["g(x)"]),
+            (["h(x)"], ["h(x)"]),
+        ])
+
+
+class Cloning(Scene):
+    """The peel-off: the copy lifts away and changes, the original stays."""
+
+    def construct(self):
+        code = block("root = x ** 0.5")
+        self.add(code)
+        self.wait(HOLD * 0.7)
+
+        copy = code.clone()
+        self.add(copy)
+        self.play(copy.animate.shift(DOWN * 1.1), run_time=0.9)
+
+        rewritten = block("root = math.sqrt(x)").shift(DOWN * 1.1)
+        self.play(CodeTransform(copy, rewritten), run_time=1.4)
         self.wait(HOLD)
-        self.play(
-            CodeTransform(
-                before,
-                after,
-                [
-                    (["result = f"], ["result = f"]),
-                    (["g(x)"], ["g(x)"]),
-                    (["h(x)"], ["h(x)"]),
-                ],
-                path_arc=ARC,
-            ),
-            run_time=2.2,
-        )
-        self.wait(HOLD * 1.4)
 
 
 class Highlighting(Scene):
