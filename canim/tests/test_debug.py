@@ -1,5 +1,6 @@
-from canim import Code
+from canim import LISP
 from canim.debug import correspondence_labels, debug_block, targets
+from conftest import lisp
 from canim.matcher import Correspondence, Op
 from canim.refs import resolve_mapping
 
@@ -33,7 +34,7 @@ def test_fades_have_no_counterpart():
 
 
 def test_every_token_on_both_sides_gets_a_label():
-    src, dst = debug_block("(f (x y))"), debug_block("(f x y)")
+    src, dst = debug_block("(f (x y))", LISP), debug_block("(f x y)", LISP)
     labels = correspondence_labels(src, dst)
     # no underlines here, so one label per token
     assert len(labels) == len(src.tokens) + len(dst.tokens)
@@ -42,8 +43,8 @@ def test_every_token_on_both_sides_gets_a_label():
 def test_manual_correspondences_are_underlined():
     from manim import Underline
 
-    src = debug_block("(swap! a b)")
-    dst = debug_block("(let ([tmp a]) (set! a b))")
+    src = debug_block("(swap! a b)", LISP)
+    dst = debug_block("(let ([tmp a]) (set! a b))", LISP)
     plain = correspondence_labels(src, dst)
     assert not any(isinstance(m, Underline) for m in plain)
 
@@ -57,8 +58,8 @@ def test_debug_blocks_are_looser_than_video_blocks():
     from canim.theme import LINE_SPACING
 
     assert DEBUG_LINE_SPACING > LINE_SPACING
-    tight = Code("(a)\n(b)")
-    loose = debug_block("(a)\n(b)")
+    tight = lisp("(a)\n(b)")
+    loose = debug_block("(a)\n(b)", LISP)
     assert loose.height > tight.height
 
 
@@ -79,7 +80,7 @@ def label_colors(source, dest, mapping=()):
 def test_a_clone_that_keeps_its_text_is_not_a_change():
     from canim.debug import TRAVELS
 
-    src, dst = Code("(swap! a b)"), Code("(let ([tmp a]) (set! a b))")
+    src, dst = lisp("(swap! a b)"), lisp("(let ([tmp a]) (set! a b))")
     colors = label_colors(src, dst, [(["a"], dst.all("a"))])
     assert colors["2->5,10"] == TRAVELS.lower()
 
@@ -87,7 +88,7 @@ def test_a_clone_that_keeps_its_text_is_not_a_change():
 def test_a_clone_into_different_words_is_a_change():
     from canim.debug import CHANGES
 
-    src, dst = Code("(swap! a b)"), Code("(let (set! a b))")
+    src, dst = lisp("(swap! a b)"), lisp("(let (set! a b))")
     colors = label_colors(
         src, dst, [(["swap!"], [dst.nth("let"), dst.nth("set!")])]
     )
@@ -103,7 +104,7 @@ def test_change_is_infectious_on_a_grouped_label_only():
     """
     from canim.debug import CHANGES, TRAVELS
 
-    src, dst = Code("(f a)"), Code("(g a b)")
+    src, dst = lisp("(f a)"), lisp("(g a b)")
     colors = label_colors(src, dst, [(["a"], [dst.nth("a"), dst.nth("b")])])
 
     assert colors["2->2,3"] == CHANGES.lower()  # infectious
@@ -114,7 +115,7 @@ def test_change_is_infectious_on_a_grouped_label_only():
 def test_a_plain_morph_is_a_change():
     from canim.debug import CHANGES
 
-    src, dst = Code("(let x)"), Code("(lambda x)")
+    src, dst = lisp("(let x)"), lisp("(lambda x)")
     colors = label_colors(src, dst, [(["let"], ["lambda"])])
     assert colors["1->1"] == CHANGES.lower()
     assert colors["1<-1"] == CHANGES.lower()

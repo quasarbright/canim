@@ -41,17 +41,27 @@ and fails to build from source.
 
 Contents:
 
-- [Code blocks](#code-blocks)
-- [Transforms](#transforms)
-- [When the guess is wrong: mapping](#when-the-guess-is-wrong-mapping)
-- [Naming tokens: refs](#naming-tokens-refs)
-- [Coloring and highlighting: selections](#coloring-and-highlighting-selections)
-- [Cloning](#cloning)
-- [Debugging a transform](#debugging-a-transform)
-- [Themes](#themes)
-- [The theme editor](#the-theme-editor)
-- [How it works](#how-it-works)
-- [Video color metadata](#video-color-metadata)
+- [canim](#canim)
+  - [Install](#install)
+  - [Code blocks](#code-blocks)
+  - [Transforms](#transforms)
+  - [When the guess is wrong: mapping](#when-the-guess-is-wrong-mapping)
+  - [Naming tokens: refs](#naming-tokens-refs)
+  - [Coloring and highlighting: selections](#coloring-and-highlighting-selections)
+  - [Cloning](#cloning)
+  - [Debugging a transform](#debugging-a-transform)
+  - [Themes](#themes)
+  - [The theme editor](#the-theme-editor)
+    - [The panel, left to right](#the-panel-left-to-right)
+    - [The stage](#the-stage)
+    - [Warnings](#warnings)
+    - [The hue map](#the-hue-map)
+    - [Saving](#saving)
+  - [How it works](#how-it-works)
+    - [The color math](#the-color-math)
+  - [Video color metadata](#video-color-metadata)
+  - [Tests](#tests)
+  - [License](#license)
 
 ---
 
@@ -61,15 +71,19 @@ Contents:
 manim.
 
 ```python
-from canim import Code, LISP, PYTHON, JAVASCRIPT
+from canim import Code, PYTHON, JAVASCRIPT, LISP
 
-Code("(swap a b)", LISP)
 Code("def f(x): return x + 1", PYTHON)
 Code("const f = (x) => x + 1", JAVASCRIPT)
 ```
 
-The language may be a name instead: `Code("...", "python")`. It defaults to
-Lisp. Also accepted: `font`, `font_size`, `line_spacing`, `theme`.
+`PYTHON`, `JAVASCRIPT` and `LISP` ship. The language may be a name instead:
+`Code("...", "python")`, `"javascript"`, `"js"`, `"lisp"`.
+
+**The language is required.** There is no default, because a block lexed as
+the wrong language does not fail — it renders, colored and matched by another
+language's rules, and nothing tells you. Also accepted: `font`, `font_size`,
+`line_spacing`, `theme`.
 
 ```python
 Code(source, PYTHON, font_size=28, theme=theme.MONOKAI)
@@ -84,8 +98,8 @@ shows — the lexer belongs to the block, not to the animation.
 will hold `dest` afterwards. You do not add `dest` yourself.
 
 ```python
-before = Code("(swap a b)", LISP)
-after = Code("(rotate a b c)", LISP)
+before = Code("print(msg)", PYTHON)
+after = Code("log.info(msg)", PYTHON)
 
 self.add(before)
 self.play(CodeTransform(before, after))
@@ -93,13 +107,13 @@ self.play(CodeTransform(before, after))
 
 ![](docs/basic.gif)
 
-Three outcomes, and every token gets exactly one: the parens and `a` and `b`
-**move**, `swap` **fades out**, `rotate` and `c` **fade in**. Everything else
-in this README is those three, chosen differently.
+Three outcomes, and every token gets exactly one: the parens and `msg`
+**move**, `print` **fades out**, `log`, `.` and `info` **fade in**. Everything
+else in this README is those three, chosen differently.
 
 Options:
 
-| | |
+| option | description |
 |---|---|
 | `path_arc` | curve the moving glyphs instead of sliding them straight |
 | `lag` | stagger between glyphs, default `0.08`; `0` moves everything at once |
@@ -107,18 +121,19 @@ Options:
 ## When the guess is wrong: mapping
 
 Matching is automatic, and there is a whole class of transform it cannot get
-right on its own: anything that uses a token more than once. Expanding a macro
+right on its own: anything that uses a token more than once, or transforms one token to another that has different text content. Expanding a macro
 call is the standard case, because a macro pastes each argument into several
 places.
 
-`(swap x y)` expands to a `let` that mentions `x` twice and `y` twice. Play
-that with no mapping and this is what you get:
+Inlining a call is the everyday case. `hypot(dx, dy)` becomes its own body,
+which uses each argument twice. Play that with no mapping and this is what you
+get:
 
 ![](docs/mapping-wrong.gif)
 
-Watch the second `x` and the second `y`. They do not come from the call — they
-fade in from nothing, while the call's own `x` and `y` each fly to one slot and
-leave the other empty. The expansion reads as half substitution and half
+Watch the second `dx` and the second `dy`. They do not come from the call —
+they fade in from nothing, while the call's own arguments each fly to one slot
+and leave the other empty. The substitution reads as half real and half
 spontaneous generation.
 
 Nothing is wrong with the final frame. That is the trap: it is a perfectly
@@ -128,51 +143,49 @@ the motion or read the correspondence:
 ```
 destination
 --------------------------------
-  5 'x'          <- 2        move       ← came from the call
- 10 'x'          <- ·        fade in    ← appeared from nowhere
- 11 'y'          <- 3        move       ← came from the call
- 12 'y'          <- ·        fade in    ← appeared from nowhere
+  4 'dx'         <- 4        move       ← came from the call
+  6 'dx'         <- ·        fade in    ← appeared from nowhere
+  8 'dy'         <- 6        move       ← came from the call
+ 10 'dy'         <- ·        fade in    ← appeared from nowhere
 ```
 
-The call has one `x` and the expansion needs two, so the greedy layer — which
+The call has one `dx` and the body needs two, so the greedy layer — which
 pairs by text in source order — runs out. Say what you meant instead:
 
 ```python
-before = Code("(swap x y)", LISP)
-after = Code("(let ((tmp x))\n  (setf x y\n        y tmp))", LISP)
+before = Code("dist = hypot(dx, dy)", PYTHON)
+after = Code("dist = sqrt(dx * dx + dy * dy)", PYTHON)
 
 self.play(CodeTransform(before, after, [
-    (["x"], after.all("x")),
-    (["y"], after.all("y")),
+    (["dx"], after.all("dx")),
+    (["dy"], after.all("dy")),
 ]))
 ```
 
 ![](docs/mapping.gif)
 
-Now each argument visibly splits and both copies travel to where the macro
-pasted them, which is what a substitution actually does. `tmp` still fades in,
-correctly — it is the one name in the expansion that did not come from the
-call.
+Now each argument visibly splits and both copies travel to where the body uses
+them, which is what a substitution actually does.
 
-This is the same shape as the mapping in the macros video, `fun_pasted` in
-`2026/macros/main.py`: it asserts where the call's tokens land, for exactly
-this reason. There it matters twice over, because the name the macro
-introduces is `tmp` — and if the *caller* also has a `tmp`, the greedy layer
-will happily pair the user's with the macro's. That is the hygiene bug the
-video is about, and the mapping is what keeps the animation from telling the
-wrong story about it.
+Macro expansion is the same shape, and worse — a macro also introduces names
+of its own. The mapping in the macros video, `fun_pasted` in
+`2026/macros/main.py`, asserts where the call's tokens land for exactly this
+reason. There it matters twice over: the name the macro introduces is `tmp`,
+so if the *caller* also has a `tmp`, the greedy layer will happily pair the
+user's with the macro's. That is the hygiene bug the video is about, and the
+mapping is what keeps the animation from telling the wrong story about it.
 
 Each side is a list of *refs*. Counts are counted in refs, not tokens, so a
 multi-token ref is one thing. That is how splits and merges are written:
 
 ```python
 # one token becomes two — it splits and both copies travel
-before, after = Code("(f tmp)", LISP), Code("(g g1 g1)", LISP)
-CodeTransform(before, after, [(["tmp"], after.all("g1"))])
+before, after = Code("f(n)", PYTHON), Code("n * n", PYTHON)
+CodeTransform(before, after, [(["n"], after.all("n"))])
 
 # two become one — they merge
-before, after = Code("(+ x x)", LISP), Code("(* total 2)", LISP)
-CodeTransform(before, after, [(before.all("x"), ["total"])])
+before, after = Code("x + x", PYTHON), Code("2 * x", PYTHON)
+CodeTransform(before, after, [(before.all("x"), ["x"])])
 ```
 
 Note which block each ref comes from: a `from` ref must name a token in the
@@ -193,14 +206,24 @@ renders silently.
 A bare string is the first token with that text. For anything else:
 
 ```python
-code.nth("b", 1)        # the second `b`
-code.all("swap")        # every `swap`, as a list of refs
+code.nth("x", 1)           # the second `x`
+code.all("x")              # every `x`, as a list of refs
 code.nth("(", 0).partner   # the `)` that closes it
+code.nth("min(x, hi)")     # several tokens as one ref
 ```
 
-Resolution is token-level, never a substring search. `"a"` in `(swap a b)`
-will not match the `a` inside `swap`, will not land inside a string literal or
-a comment, and a multi-token ref like `"(lambda (x) (x x))"` is found however
+Resolution is token-level, never a substring search. In
+
+```python
+# keep x within [lo, hi]
+def clamp(x, lo, hi):
+    return max(lo, min(x, hi))
+```
+
+`code.all("x")` finds exactly two tokens. It does not find the `x` in the
+comment, because a comment is one token whose text merely contains it, and it
+would not find one inside a string literal or inside a longer name either. A
+multi-token ref is matched against the token sequence, so it is found however
 it happens to be line-broken on screen.
 
 ## Coloring and highlighting: selections
@@ -209,10 +232,15 @@ it happens to be line-broken on screen.
 everything you already do in manim works:
 
 ```python
-code = Code("(defmacro swap (a b)\n  `(let ((tmp ,a))\n     (setf ,a ,b)))", LISP)
+code = Code(
+    "# keep x within [lo, hi]\n"
+    "def clamp(x, lo, hi):\n"
+    "    return max(lo, min(x, hi))",
+    PYTHON,
+)
 
-# every `a` and `b`, wherever they appear — including under a comma
-self.play(code.select(code.all("a") + code.all("b")).animate.set_color(GOLD))
+# both `x` tokens — not the one in the comment
+self.play(code.select(code.all("x")).animate.set_color(GOLD))
 
 # a delimiter and the one that balances it
 opener = code.nth("(", 0)
@@ -220,16 +248,17 @@ self.play(code.select([opener, opener.partner]).animate.set_color(RED))
 ```
 
 For geometry rather than a tween, `.boxes()` draws a rectangle around each
-contiguous run:
+contiguous run — and a multi-token ref is one run, so it gets one box:
 
 ```python
-self.play(Create(code.select(code.all("tmp")).boxes()))
+self.play(Create(code.select(code.nth("min(x, hi)")).boxes()))
 ```
 
-All three together — every `a` and `b` recolored (including the ones under a
-comma), then a paren and its partner, then a box:
+All three in sequence:
 
 ![](docs/highlighting.gif)
+
+The `x` in the comment staying gray is the token-level rule, visible.
 
 Because a box is a real mobject over real glyphs, it can be attached to what
 it marks and moved along with it, instead of being re-drawn every beat.
@@ -258,26 +287,37 @@ correspondence produces a perfectly correct final frame — the tokens just took
 absurd routes to get there. Pixels prove nothing here.
 
 ```python
-from canim import dump, match
+from canim import dump, match, PYTHON, JAVASCRIPT
 from canim.lexer import lex
 
-a = lex("(swap a b)", LISP)
-b = lex("(rotate a b c)", LISP)
+a = lex("def add(a, b):\n    return a + b", PYTHON)
+b = lex("function add(a, b) {\n  return a + b;\n}", JAVASCRIPT)
 print(dump(a, b, match(a, b)))
 ```
 
 ```
 source                            destination
 --------------------------------  --------------------------------
-  0 '('          -> 0        move             0 '('          <- 0        move
-  1 'swap'       -> ·        fade out         1 'rotate'     <- ·        fade in
-  2 'a'          -> 2        move             2 'a'          <- 2        move
-  3 'b'          -> 3        move             3 'b'          <- 3        move
-  4 ')'          -> 5        move             4 'c'          <- ·        fade in
-                                              5 ')'          <- 4        move
+  0 'def'        -> ·        fade out         0 'function'   <- ·        fade in
+  1 'add'        -> 1        move             1 'add'        <- 1        move
+  2 '('          -> 2        move             2 '('          <- 2        move
+  3 'a'          -> 3        move             3 'a'          <- 3        move
+  4 ','          -> 4        move             4 ','          <- 4        move
+  5 'b'          -> 5        move             5 'b'          <- 5        move
+  6 ')'          -> 6        move             6 ')'          <- 6        move
+  7 ':'          -> ·        fade out         7 '{'          <- ·        fade in
+  8 'return'     -> 8        move             8 'return'     <- 8        move
+  9 'a'          -> 9        move             9 'a'          <- 9        move
+ 10 '+'          -> 10       move            10 '+'          <- 10       move
+ 11 'b'          -> 11       move            11 'b'          <- 11       move
+                                             12 ';'          <- ·        fade in
+                                             13 '}'          <- ·        fade in
 
 * = from the mapping;  · = no counterpart
 ```
+
+This is the opening example, and the table is how you know it is right: the
+second `a` went to the second `a`, not across to the first.
 
 Read it in both directions. Most mapping bugs are one token flying somewhere
 it has no business going, and this is the only way to see it. `*` marks what

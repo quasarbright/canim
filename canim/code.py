@@ -29,7 +29,7 @@ class Code(VGroup):
     def __init__(
         self,
         source: str,
-        language: Language | str = "lisp",
+        language: Language | str,
         *,
         font: str | None = None,
         font_size: float | None = None,

@@ -11,7 +11,7 @@ so the loop reads.
 
 from manim import *
 
-from canim import Code, CodeTransform, JAVASCRIPT, Kind, LISP, PYTHON, theme
+from canim import Code, CodeTransform, JAVASCRIPT, Kind, PYTHON, theme
 
 THEME = theme.ONE_DARK_SLATE
 config.background_color = THEME.background
@@ -21,7 +21,7 @@ HOLD = 0.9
 ARC = 0.7  # curves the moving glyphs, so two copies of one token visibly fan out
 
 
-def block(source: str, language=LISP) -> Code:
+def block(source: str, language=PYTHON) -> Code:
     return Code(source, language, font_size=FONT_SIZE, theme=THEME)
 
 
@@ -49,27 +49,27 @@ class Basic(Scene):
     """All three outcomes in one line: move, fade out, fade in."""
 
     def construct(self):
-        before = block("(swap a b)")
-        after = block("(rotate a b c)")
+        before = block("print(msg)")
+        after = block("log.info(msg)")
         self.add(before)
         self.wait(HOLD)
         self.play(CodeTransform(before, after), run_time=1.6)
         self.wait(HOLD)
 
 
-# A macro call and what it expands to. Each argument is pasted into more
-# than one place, which is the case the automatic layers cannot cover: they
-# pair by text in source order, and there is only one `x` to go around.
-SWAP_USE = "(swap x y)"
-SWAP_EXPANDED = "(let ((tmp x))\n  (setf x y\n        y tmp))"
+# A call, and the same thing with the call inlined. Each argument is used
+# twice in the result, which is the case the automatic layers cannot cover:
+# they pair by text in source order, and there is only one `dx` to go around.
+INLINE_CALL = "dist = hypot(dx, dy)"
+INLINE_BODY = "dist = sqrt(dx * dx + dy * dy)"
 
 
 class MappingWrong(Scene):
-    """The same expansion with no mapping — half the names appear from nowhere."""
+    """The same inlining with no mapping — half the names appear from nowhere."""
 
     def construct(self):
-        before = block(SWAP_USE)
-        after = block(SWAP_EXPANDED)
+        before = block(INLINE_CALL)
+        after = block(INLINE_BODY)
         self.add(before)
         self.wait(HOLD)
         # Same arc and timing as `Mapping`, so the only difference between
@@ -82,15 +82,15 @@ class Mapping(Scene):
     """One token becoming several, because the mapping says so."""
 
     def construct(self):
-        before = block(SWAP_USE)
-        after = block(SWAP_EXPANDED)
+        before = block(INLINE_CALL)
+        after = block(INLINE_BODY)
         self.add(before)
         self.wait(HOLD)
         self.play(
             CodeTransform(
                 before,
                 after,
-                [(["x"], after.all("x")), (["y"], after.all("y"))],
+                [(["dx"], after.all("dx")), (["dy"], after.all("dy"))],
                 path_arc=ARC,
             ),
             run_time=2.2,
@@ -102,15 +102,18 @@ class Highlighting(Scene):
     """Selections: color the tokens you name, box the runs you name."""
 
     def construct(self):
-        code = block("(defmacro swap (a b)\n  `(let ((tmp ,a))\n     (setf ,a ,b)))")
+        code = block(
+            "# keep x within [lo, hi]\n"
+            "def clamp(x, lo, hi):\n"
+            "    return max(lo, min(x, hi))"
+        )
         self.add(code)
         self.wait(HOLD * 0.6)
 
-        # Every `a` and `b`, wherever they appear — including under a comma.
+        # Both `x` tokens. Not the `x` in the comment: refs resolve against
+        # tokens, and a comment is one token whose text happens to contain it.
         self.play(
-            code.select(code.all("a") + code.all("b")).animate.set_color(
-                THEME.colors[Kind.LITERAL]
-            ),
+            code.select(code.all("x")).animate.set_color(THEME.colors[Kind.LITERAL]),
             run_time=0.8,
         )
         self.wait(HOLD * 0.5)
@@ -123,5 +126,6 @@ class Highlighting(Scene):
         )
         self.wait(HOLD * 0.5)
 
-        self.play(Create(code.select(code.all("tmp")).boxes()), run_time=0.8)
+        # A multi-token ref is one contiguous run, so it gets one box.
+        self.play(Create(code.select(code.nth("min(x, hi)")).boxes()), run_time=0.8)
         self.wait(HOLD)

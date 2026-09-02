@@ -3,8 +3,9 @@
 import pytest
 from manim import Scene
 
-from canim import Code, CodeTransform
+from canim import CodeTransform
 from canim.matcher import Op
+from conftest import lisp
 
 
 def played(source, dest, mapping=()):
@@ -25,25 +26,25 @@ def test_scene_ends_holding_exactly_dest():
     # The glyph slices are temporary VGroups over dest.text's children, so a
     # sloppy cleanup leaves both them and dest in the scene, drawing every
     # glyph twice.
-    src, dst = Code("(a + b)"), Code("(+ a b)")
+    src, dst = lisp("(a + b)"), lisp("(+ a b)")
     scene, _ = played(src, dst)
     assert scene.mobjects == [dst]
 
 
 def test_source_is_gone():
-    src, dst = Code("(f (x y))"), Code("(f x y)")
+    src, dst = lisp("(f (x y))"), lisp("(f x y)")
     scene, _ = played(src, dst)
     assert src not in scene.mobjects
 
 
 def test_reorder_is_all_moves():
-    src, dst = Code("(a + b)"), Code("(+ a b)")
+    src, dst = lisp("(a + b)"), lisp("(+ a b)")
     _, anim = played(src, dst)
     assert {c.op for c in anim.correspondences} == {Op.MOVE}
 
 
 def test_flatten_moves_and_fades():
-    src, dst = Code("(f (x y))"), Code("(f x y)")
+    src, dst = lisp("(f (x y))"), lisp("(f x y)")
     _, anim = played(src, dst)
     ops = {c.op for c in anim.correspondences}
     assert ops == {Op.MOVE, Op.FADE_OUT}
@@ -52,7 +53,7 @@ def test_flatten_moves_and_fades():
 def test_one_animation_per_glyph_pair():
     # Multi-character tokens pair glyph by glyph, so we never hand manim two
     # mismatched VGroups and let align_data pad them into a smear.
-    src, dst = Code("(let x)"), Code("(x let)")
+    src, dst = lisp("(let x)"), lisp("(x let)")
     _, anim = played(src, dst)
     assert len(anim.animations) == len(src.source.replace(" ", ""))
 
@@ -65,7 +66,7 @@ def test_morph_with_a_shared_prefix_pairs_glyphs():
     # grow out of it, so this pairs glyph by glyph rather than cross-fading.
     from manim import FadeTransform
 
-    src, dst = Code("(f tmp)"), Code("(f tmp_G4271)")
+    src, dst = lisp("(f tmp)"), lisp("(f tmp_G4271)")
     anim = CodeTransform(src, dst, [(["tmp"], ["tmp_G4271"])])
     assert not any(isinstance(a, FadeTransform) for a in anim.animations)
 
@@ -75,7 +76,7 @@ def test_morph_between_unlike_words_cross_fades():
     # place, which reads as mush.
     from manim import FadeTransform
 
-    src, dst = Code("(let x)"), Code("(lambda x)")
+    src, dst = lisp("(let x)"), lisp("(lambda x)")
     anim = CodeTransform(src, dst, [(["let"], ["lambda"])])
     assert any(isinstance(a, FadeTransform) for a in anim.animations)
 
@@ -86,7 +87,7 @@ def test_morph_that_shares_a_prefix_then_diverges_cross_fades():
     # and strand the trailing `e`, so a shared prefix alone is not enough.
     from manim import FadeTransform
 
-    src, dst = Code("(f machine_code)"), Code("(f machine_ast)")
+    src, dst = lisp("(f machine_code)"), lisp("(f machine_ast)")
     anim = CodeTransform(src, dst, [(["machine_code"], ["machine_ast"])])
     assert any(isinstance(a, FadeTransform) for a in anim.animations)
 
@@ -94,20 +95,20 @@ def test_morph_that_shares_a_prefix_then_diverges_cross_fades():
 def test_morph_still_pairs_when_one_word_extends_the_other():
     from manim import FadeTransform
 
-    src, dst = Code("(f set)"), Code("(f set-box!)")
+    src, dst = lisp("(f set)"), lisp("(f set-box!)")
     anim = CodeTransform(src, dst, [(["set"], ["set-box!"])])
     assert not any(isinstance(a, FadeTransform) for a in anim.animations)
 
 
 def test_morph_is_flagged_manual():
-    src, dst = Code("(let x)"), Code("(lambda x)")
+    src, dst = lisp("(let x)"), lisp("(lambda x)")
     anim = CodeTransform(src, dst, [(["let"], ["lambda"])])
     morphs = [c for c in anim.correspondences if c.op is Op.MORPH]
     assert len(morphs) == 1 and morphs[0].manual
 
 
 def test_scene_still_ends_clean_with_a_mapping():
-    src, dst = Code("(let x)"), Code("(lambda x)")
+    src, dst = lisp("(let x)"), lisp("(lambda x)")
     scene = Scene()
     scene.add(src)
     anim = CodeTransform(src, dst, [(["let"], ["lambda"])])
@@ -123,7 +124,7 @@ def test_scene_still_ends_clean_with_a_mapping():
 def test_other_mobjects_in_the_scene_survive():
     from manim import Dot
 
-    src, dst = Code("(a + b)"), Code("(+ a b)")
+    src, dst = lisp("(a + b)"), lisp("(+ a b)")
     bystander = Dot()
     scene = Scene()
     scene.add(bystander, src)
@@ -149,7 +150,7 @@ def test_clone_moves_the_original_and_copies_the_rest():
     """
     from manim import ReplacementTransform, TransformFromCopy
 
-    src, dst = Code("(swap a b)"), Code("(let (t a) (set a b))")
+    src, dst = lisp("(swap a b)"), lisp("(let (t a) (set a b))")
     anim = CodeTransform(src, dst, [(["a"], dst.all("a"))], lag=0)
     flat = _flatten(anim)
 
@@ -163,7 +164,7 @@ def test_clone_moves_the_original_and_copies_the_rest():
 
 
 def test_a_clone_animates_one_thing_per_destination():
-    src, dst = Code("(swap a b)"), Code("(let (t a) (set a b) (f a))")
+    src, dst = lisp("(swap a b)"), lisp("(let (t a) (set a b) (f a))")
     anim = CodeTransform(src, dst, [(["a"], dst.all("a"))], lag=0)
     clone = next(c for c in anim.correspondences if c.op is Op.CLONE)
     assert len(clone.dst) == 3
@@ -180,14 +181,14 @@ def test_a_clone_animates_one_thing_per_destination():
 def test_clone_is_staggered_by_default():
     from manim import LaggedStart
 
-    src, dst = Code("(swap a b)"), Code("(let (t a) (set a b))")
+    src, dst = lisp("(swap a b)"), lisp("(let (t a) (set a b))")
     anim = CodeTransform(src, dst, [(["a"], dst.all("a"))])
     assert any(isinstance(a, LaggedStart) for a in anim.animations)
 
 
 def test_clone_of_a_whole_subexpression():
-    src = Code("(g (h x))")
-    dst = Code("((h x) (h x))")
+    src = lisp("(g (h x))")
+    dst = lisp("((h x) (h x))")
     anim = CodeTransform(src, dst, [([src.nth("(h x)")], dst.all("(h x)"))], lag=0)
     clone = next(c for c in anim.correspondences if c.op is Op.CLONE)
     # one group in, two groups out, four tokens each
@@ -201,7 +202,7 @@ def test_merging_copies_of_the_same_word_all_travel():
     # visibly different means.
     from manim import FadeTransform
 
-    src, dst = Code("(f tmp tmp)"), Code("(f tmp)")
+    src, dst = lisp("(f tmp tmp)"), lisp("(f tmp)")
     anim = CodeTransform(src, dst, [(src.all("tmp"), ["tmp"])])
     assert not any(isinstance(a, FadeTransform) for a in _flatten(anim))
 
@@ -211,7 +212,7 @@ def test_splitting_into_unlike_words_cross_fades_every_branch():
     # dissolve. Pairing them would put `p` onto `'` down each one.
     from manim import FadeTransform
 
-    src, dst = Code("(f paid)"), Code("(f 'paid' 'paid')")
+    src, dst = lisp("(f paid)"), lisp("(f 'paid' 'paid')")
     anim = CodeTransform(src, dst, [(["paid"], dst.all("'paid'"))])
     flat = _flatten(anim)
     assert sum(isinstance(a, FadeTransform) for a in flat) == 2
@@ -220,7 +221,7 @@ def test_splitting_into_unlike_words_cross_fades_every_branch():
 def test_splitting_into_the_same_word_travels_on_every_branch():
     from manim import FadeTransform
 
-    src, dst = Code("(f tmp)"), Code("(f tmp tmp)")
+    src, dst = lisp("(f tmp)"), lisp("(f tmp tmp)")
     anim = CodeTransform(src, dst, [(["tmp"], dst.all("tmp"))])
     assert not any(isinstance(a, FadeTransform) for a in _flatten(anim))
 
@@ -230,7 +231,7 @@ def test_merging_unlike_words_cross_fades_all_of_them():
     # Pairing the first would map `'` onto `p` and `p` onto `a`.
     from manim import FadeTransform
 
-    src, dst = Code("(f 'paid' 'paid')"), Code("(f paid)")
+    src, dst = lisp("(f 'paid' 'paid')"), lisp("(f paid)")
     anim = CodeTransform(src, dst, [(src.all("'paid'"), ["paid"])])
     flat = _flatten(anim)
     assert sum(isinstance(a, FadeTransform) for a in flat) == 2
@@ -245,7 +246,7 @@ def test_clone_and_merge_leave_the_scene_clean():
         ("(f paid)", "(f 'paid' 'paid')", lambda s, d: [(["paid"], d.all("'paid'"))]),
         ("(f 'paid' 'paid')", "(f paid)", lambda s, d: [(s.all("'paid'"), ["paid"])]),
     ]:
-        src, dst = Code(before), Code(after)
+        src, dst = lisp(before), lisp(after)
         scene = Scene()
         scene.add(src)
         anim = CodeTransform(src, dst, mapping_for(src, dst))

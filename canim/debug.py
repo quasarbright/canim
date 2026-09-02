@@ -34,7 +34,7 @@ except on top of the line above it. Build blocks for a correspondence view with
 """
 
 
-def debug_block(source: str, language="lisp", **kwargs) -> Code:
+def debug_block(source: str, language, **kwargs) -> Code:
     kwargs.setdefault("line_spacing", DEBUG_LINE_SPACING)
     return Code(source, language, **kwargs)
 
