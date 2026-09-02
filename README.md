@@ -32,6 +32,11 @@ Every GIF below is rendered from [`examples/readme.py`](examples/readme.py):
 manim examples/readme.py -qm --format=gif -r 960,320 Languages
 ```
 
+The snippets differ from that file in three ways, all of them presentation:
+it sets a theme and a font size on every block, passes a `run_time`, and holds
+a still frame at each end so the loop reads. Anything that changes *what
+happens* is in the snippet.
+
 ## Install
 
     pip install -e .
@@ -132,7 +137,7 @@ before = Code("dist = hypot(dx, dy)", PYTHON)
 after = Code("dist = sqrt(dx * dx + dy * dy)", PYTHON)
 
 self.add(before)
-self.play(CodeTransform(before, after))
+self.play(CodeTransform(before, after, path_arc=0.7))
 ```
 
 ![](docs/mapping-wrong.gif)
@@ -163,7 +168,7 @@ two blocks, with a third argument to `CodeTransform`.
 self.play(CodeTransform(before, after, [
     (["dx"], after.all("dx")),
     (["dy"], after.all("dy")),
-]))
+], path_arc=0.7))
 ```
 
 ![](docs/mapping.gif)

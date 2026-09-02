@@ -11,7 +11,7 @@ so the loop reads.
 
 from manim import *
 
-from canim import Code, CodeTransform, JAVASCRIPT, Kind, PYTHON, theme
+from canim import Code, CodeTransform, JAVASCRIPT, PYTHON, theme
 
 THEME = theme.ONE_DARK_SLATE
 config.background_color = THEME.background
@@ -112,8 +112,10 @@ class Highlighting(Scene):
 
         # Both `x` tokens. Not the `x` in the comment: refs resolve against
         # tokens, and a comment is one token whose text happens to contain it.
+        # Manim's own GOLD and RED rather than the theme's, so the README can
+        # print this line as it stands.
         self.play(
-            code.select(code.all("x")).animate.set_color(THEME.colors[Kind.LITERAL]),
+            code.select(code.all("x")).animate.set_color(GOLD),
             run_time=0.8,
         )
         self.wait(HOLD * 0.5)
@@ -121,7 +123,7 @@ class Highlighting(Scene):
         # A delimiter and the one that balances it.
         opener = code.nth("(", 0)
         self.play(
-            code.select([opener, opener.partner]).animate.set_color(THEME.danger),
+            code.select([opener, opener.partner]).animate.set_color(RED),
             run_time=0.8,
         )
         self.wait(HOLD * 0.5)
