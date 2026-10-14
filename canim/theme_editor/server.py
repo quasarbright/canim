@@ -42,6 +42,26 @@ def workspace_themes() -> list[dict]:
         for path in sorted(directory.glob(f"*{theme_module.SUFFIX}"))
     ]
 
+
+def filename_for(name: str) -> str:
+    """`tree frog` → `tree-frog.theme.json`, the way the existing files are named."""
+    stem = "-".join(name.replace("/", " ").split())
+    if not stem or stem.startswith("."):
+        raise ValueError("a theme needs a name")
+    return stem + theme_module.SUFFIX
+
+
+def create_theme(data: dict, path: Path) -> dict:
+    """Write a new theme file. Never over an existing one, never into canim's."""
+    if path.parent == theme_module.THEMES_DIR:
+        raise ValueError("that is canim's own themes folder; choose another")
+    if path.exists():
+        raise ValueError(f"there is already a theme at {path.name}")
+    theme = theme_module.from_dict(data)
+    theme_module.save(theme, path)
+    LAST_SAVED_DIR[0] = path.parent
+    return theme_module.to_dict(theme)
+
 # What counts as worth a warning. Contrast is against the background and
 # decides legibility; separation is between two token colors and decides
 # whether you can tell them apart. Both matter and neither implies the other.
@@ -272,6 +292,9 @@ class Handler(SimpleHTTPRequestHandler):
                     "names": theme_module.discover(),
                     "workspace": workspace_themes(),
                     "directory": str(theme_module.THEMES_DIR),
+                    # Where your themes are listed from and new ones go.
+                    "yours": str(start_dir()),
+                    "home": str(Path.home()),
                     # One entry per language; `js` and `hs` are aliases.
                     "languages": sorted({lang.name for lang in BY_NAME.values()}),
                 "harmonies": sorted(palette.HARMONY),
@@ -331,6 +354,18 @@ class Handler(SimpleHTTPRequestHandler):
                 theme_module.save(theme_module.from_dict(data["theme"]), path)
                 LAST_SAVED_DIR[0] = path.parent
                 return self._send({"path": str(path)})
+            if url.path == "/api/create":
+                # Either a path chosen in the file dialog, or a name to place
+                # in the folder new themes go to.
+                if data.get("path"):
+                    path = self._checked_path(data["path"])
+                else:
+                    path = start_dir() / filename_for(data["theme"]["name"])
+                theme = create_theme(data["theme"], path)
+                return self._send({"path": str(path), "theme": theme})
+            if url.path == "/api/where":
+                # Where a new theme with this name would be written.
+                return self._send({"path": str(start_dir() / filename_for(data["name"]))})
         except (KeyError, OSError, ValueError) as error:
             return self._send({"error": str(error)}, 400)
         self._send({"error": f"no route for {url.path}"}, 404)

@@ -564,14 +564,21 @@ there are the ones that will be hard to tell apart in code.
 
 ### Saving
 
-`Save` (<kbd>⌘S</kbd>) writes back to the file you opened. `Save as` opens a
-real file dialog. `Open` lists canim's five under **canim** and everything in
-your `--themes` directories under **yours**, plus a `Browse files…` button for
-anything else.
+The editor opens on a home screen: your themes (everything in your `--themes`
+directories), a **New theme** card, and canim's own themes to start from. Click
+one of yours to edit it; `← Themes` goes back. The URL names the open theme, so
+a refresh comes back to it.
 
-Saving one of canim's own is diverted to Save As, defaulting to a name like
-`one-dark custom` — editing `one-dark` in the editor must not change what
-every video that imports it renders as.
+**New** asks for a name and a starting point: a background with every color
+generated from it, or a copy of the theme you are on. It writes the file
+straight away, into the folder you last saved to (your themes folder until
+then); `change…` picks somewhere else. It never overwrites an existing file.
+
+canim's own themes are never edited. Clicking one starts a new theme that
+copies it, since changing `one-dark` would change every video that imports it.
+The editor refuses to write into canim's themes folder at all.
+
+`Save` (<kbd>⌘S</kbd>) writes back to the file you are editing.
 
 Undo and redo are <kbd>⌘Z</kbd> and <kbd>⇧⌘Z</kbd>, and last as long as the
 tab. Closing with unsaved changes prompts first.

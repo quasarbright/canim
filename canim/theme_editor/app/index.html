@@ -7,26 +7,27 @@
 <link rel="stylesheet" href="vendor/katex.min.css">
 <link rel="stylesheet" href="app.css">
 </head>
-<body>
+<body class="home-view">
 
 <header class="bar">
   <span class="mark">canim</span>
-  <input id="theme-name" class="name" spellcheck="false" aria-label="Theme name">
-  <span id="builtin" class="dirty builtin" hidden>built-in</span>
-  <span id="dirty" class="dirty" hidden>unsaved</span>
+  <span class="home-only where" id="home-where"></span>
 
-  <div class="group">
-    <button data-act="open">Open</button>
-    <button data-act="save">Save</button>
-    <button data-act="save-as">Save as</button>
+  <button class="edit-only back" data-act="home">← Themes</button>
+  <input id="theme-name" class="name edit-only" spellcheck="false" aria-label="Theme name">
+  <span id="dirty" class="dirty edit-only" hidden>unsaved</span>
+
+  <div class="group edit-only">
+    <button data-act="save" title="Save — ⌘S">Save</button>
+    <button data-act="new-from-current">New</button>
   </div>
 
-  <div class="group">
+  <div class="group edit-only">
     <button data-act="undo" title="Undo — ⌘Z">Undo</button>
     <button data-act="redo" title="Redo — ⇧⌘Z">Redo</button>
   </div>
 
-  <div class="group push">
+  <div class="group push edit-only">
     <label class="inline">compare
       <select id="compare-with"><option value="">off</option></select>
     </label>
@@ -37,7 +38,19 @@
   </div>
 </header>
 
-<main>
+<section id="home" class="home home-only">
+  <h2 class="home-head">Your themes</h2>
+  <p class="home-sub">Click one to edit it.</p>
+  <div class="cards" id="cards-yours"></div>
+
+  <h2 class="home-head">Start from one of canim's</h2>
+  <p class="home-sub">Makes a new theme in your folder with these colors. canim's own stay as they are.</p>
+  <div class="cards" id="cards-canim"></div>
+
+  <p class="home-sub"><button class="link" id="open-browse">Open a theme file from somewhere else…</button></p>
+</section>
+
+<main class="edit-only">
   <aside class="rail">
     <section class="block">
       <h2>background</h2>
@@ -148,24 +161,35 @@
   </div>
 </main>
 
-<dialog id="open-dialog">
-  <form method="dialog">
-    <h3>Open a theme</h3>
-    <ul id="theme-list" class="theme-list"></ul>
-    <menu>
-      <button value="cancel">Cancel</button>
-      <button type="button" id="open-browse" class="primary">Browse files…</button>
-    </menu>
-  </form>
-</dialog>
+<dialog id="new-dialog">
+  <form method="dialog" id="new-form">
+    <h3>New theme</h3>
+    <label class="stacked">Name
+      <input type="text" id="new-name" spellcheck="false" autocomplete="off">
+    </label>
 
-<dialog id="save-dialog">
-  <form method="dialog">
-    <h3>Save as</h3>
-    <p class="note" id="save-current"></p>
+    <div class="stacked">Start from</div>
+    <label class="start" id="start-generate">
+      <input type="radio" name="start" value="generate">
+      <span>a background, with every color generated</span>
+      <button type="button" class="swatch" id="new-background" aria-label="Background"></button>
+    </label>
+    <label class="start" id="start-copy">
+      <input type="radio" name="start" value="copy">
+      <span id="copy-label"></span>
+      <span class="swatches" id="copy-swatches"></span>
+    </label>
+
+    <div class="stacked">Saved to</div>
+    <div class="where-row">
+      <span id="new-path" class="path"></span>
+      <button type="button" class="link" id="new-browse">change…</button>
+    </div>
+    <p class="error" id="new-error" hidden></p>
+
     <menu>
-      <button value="cancel">Cancel</button>
-      <button type="button" id="save-browse" class="primary">Choose location…</button>
+      <button type="button" id="new-cancel">Cancel</button>
+      <button type="submit" class="primary">Create</button>
     </menu>
   </form>
 </dialog>

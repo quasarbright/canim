@@ -61,8 +61,6 @@ const state = {
   showing: "a",     // which theme the single pane shows in toggle mode
   cvd: "",
   gen: { harmony: null, chroma: null, spread: null },  // filled from the server
-  builtin: false,   // opened from canim's own themes directory
-  openedAs: null,   // the name it had when opened, to spot a rename
 };
 
 const history = { past: [], future: [] };
@@ -157,6 +155,9 @@ function openPicker(anchor, value, onChange) {
   pickerState.hsv = hexToHsv(value);
   pickerState.onChange = onChange;
   pickerState.gesture = newGesture("hex");   // typing a hex is one undo step
+  // A modal dialog sits in the top layer, above anything in the body, so a
+  // picker opened from one has to live inside it to be seen.
+  (anchor.closest("dialog") ?? document.body).append(picker);
   picker.hidden = false;
   paintPicker();
   const box = anchor.getBoundingClientRect();
@@ -544,7 +545,6 @@ function render() {
   // Only when it differs, so typing in it does not have its caret reset.
   if ($("#theme-name").value !== state.theme.name) $("#theme-name").value = state.theme.name;
   $("#dirty").hidden = !dirty();
-  $("#builtin").hidden = !state.builtin;
 
   const background = colorRow("background");
   $("#row-background").replaceChildren(background);
@@ -586,51 +586,148 @@ function toast(message) {
 
 // --- files ------------------------------------------------------------------
 
+/* The page is a home screen listing themes, or the editor on one of yours.
+   canim's own themes are never edited: picking one starts a new theme that
+   copies it, so Save always has a file of yours to write to. */
+
+const editing = () => !document.body.classList.contains("home-view");
+
+/** `/Users/you/videos/themes` → `~/videos/themes`, short enough to read. */
+const tilde = (path) =>
+  catalogue.home && path.startsWith(catalogue.home) ? `~${path.slice(catalogue.home.length)}` : path;
+
 async function openTheme(path) {
   const { theme, path: resolved, builtin } = await api(
     `/api/theme?path=${encodeURIComponent(path)}`);
+  if (builtin) return openNewDialog({ copyOf: theme });
   state.theme = theme;
   state.path = resolved;
-  state.builtin = Boolean(builtin);
-  state.openedAs = theme.name;
   state.saved = JSON.stringify(theme);
   history.past.length = history.future.length = 0;
+  endGesture();
+  document.body.classList.remove("home-view");
+  // In the URL, so a refresh comes back to the same theme.
+  window.history.replaceState(null, "", `?theme=${encodeURIComponent(resolved)}`);
   render();
-  toast(`Opened ${theme.name}`);
+  renderCode();
 }
 
-async function save(path) {
-  // Save never writes back over a theme canim ships. Editing one and hitting
-  // Save is how you explore, not how you replace what the videos render with,
-  // so it turns into Save as with a name of its own.
-  if (!path && state.builtin) return saveAs();
-  const target = path || state.path;
-  if (!target) return saveAs();
-  await api("/api/theme", { path: target, theme: state.theme });
-  state.path = target;
-  state.builtin = false;   // wherever it landed, it is yours now
-  state.openedAs = state.theme.name;
+async function save() {
+  if (!editing()) return;
+  await api("/api/theme", { path: state.path, theme: state.theme });
   state.saved = JSON.stringify(state.theme);
-  render();   // the built-in and unsaved badges both just changed
-  toast(`Saved to ${target}`);
+  render();
+  toast(`Saved ${state.theme.name}`);
 }
 
-/** What a copy of the current theme should be called. */
-function suggestedName() {
-  const name = state.theme.name.trim();
-  // Only rename when it is still carrying the built-in's own name. Once you
-  // have called it something, that is the name.
-  return state.builtin && name === state.openedAs ? `${name} custom` : name;
+async function showHome() {
+  if (editing() && dirty()
+      && !confirm(`Discard your unsaved changes to ${state.theme.name}?`)) return;
+  closePicker();
+  document.body.classList.add("home-view");
+  window.history.replaceState(null, "", location.pathname);
+  // Read the folders again every time: a theme made since the page loaded
+  // has to show up without a refresh.
+  catalogue = await api("/api/themes");
+  $("#home-where").textContent = tilde(catalogue.yours);
+
+  const fetchTheme = async (at) =>
+    (await api(`/api/theme?path=${encodeURIComponent(at)}`)).theme;
+  const yours = await Promise.all(catalogue.workspace.map((t) => fetchTheme(t.path)));
+  const canims = await Promise.all(catalogue.names.map(fetchTheme));
+
+  const fresh = el("button", { type: "button", className: "card new" });
+  fresh.append(el("b", { textContent: "+" }), el("span", { textContent: "New theme" }));
+  fresh.addEventListener("click", () => openNewDialog());
+  $("#cards-yours").replaceChildren(fresh, ...yours.map((theme, i) =>
+    card(theme, () => openTheme(catalogue.workspace[i].path))));
+  $("#cards-canim").replaceChildren(...canims.map((theme) =>
+    card(theme, () => openNewDialog({ copyOf: theme }))));
 }
 
-function saveAs() {
-  $("#save-current").textContent = state.builtin
-    ? `${state.openedAs} is one of canim's own themes, so it is not written `
-      + `back over. Choose where your version goes.`
-    : state.path
-      ? `Currently saved at ${state.path}`
-      : "Not saved anywhere yet.";
-  $("#save-dialog").showModal();
+/** A theme as a little painting of code lines in its own colors. */
+function card(theme, onClick) {
+  const button = el("button", { type: "button", className: "card" });
+  const thumb = el("div", { className: "thumb" });
+  thumb.style.background = theme.background;
+  const lines = [["keyword", 55], ["identifier", 80], ["builtin", 40],
+                 ["string", 65], ["literal", 28], ["comment", 85]];
+  for (const [role, width] of lines) {
+    const line = el("i");
+    line.style.background = theme[role];
+    line.style.width = `${width}%`;
+    thumb.append(line);
+  }
+  button.append(thumb, el("span", { className: "card-name", textContent: theme.name }));
+  button.addEventListener("click", () => Promise.resolve(onClick()).catch((e) => toast(e.message)));
+  return button;
+}
+
+// --- the new-theme dialog ---------------------------------------------------
+
+const newTheme = { copyOf: null, background: "#12121c", path: null };
+
+function openNewDialog({ copyOf = null } = {}) {
+  newTheme.copyOf = copyOf;
+  newTheme.background = copyOf?.background ?? "#12121c";
+  newTheme.path = null;   // chosen with "change…"; otherwise your themes folder
+
+  $("#new-name").value = copyOf ? `${copyOf.name} copy` : "untitled";
+  $("#start-copy").hidden = !copyOf;
+  if (copyOf) {
+    $("#copy-label").textContent = `a copy of ${copyOf.name}`;
+    $("#copy-swatches").replaceChildren(
+      ...["background", "keyword", "builtin", "literal", "string"].map((role) => {
+        const chip = el("i");
+        chip.style.background = copyOf[role];
+        return chip;
+      }));
+  }
+  document.querySelector(`input[name=start][value=${copyOf ? "copy" : "generate"}]`).checked = true;
+  $("#new-background").style.setProperty("--swatch", newTheme.background);
+  $("#new-error").hidden = true;
+  $("#new-dialog").showModal();
+  $("#new-name").select();
+  showNewPath();
+}
+
+async function showNewPath() {
+  if (newTheme.path) {
+    $("#new-path").textContent = tilde(newTheme.path);
+    return;
+  }
+  try {
+    const { path } = await api("/api/where", { name: $("#new-name").value });
+    $("#new-path").textContent = tilde(path);
+  } catch (error) {
+    $("#new-path").textContent = error.message;
+  }
+}
+
+async function createTheme() {
+  const name = $("#new-name").value.trim();
+  const start = document.querySelector("input[name=start]:checked").value;
+  let theme;
+  if (start === "copy") {
+    theme = { ...newTheme.copyOf, name };
+  } else {
+    const generated = await api("/api/generate/palette",
+      { background: newTheme.background, ...state.gen });
+    // Only the token colors. The chrome is left to follow the background,
+    // which is what a theme nobody has tuned yet should do.
+    const tokens = Object.fromEntries(
+      Object.entries(generated).filter(([key]) => !key.startsWith("chrome_")));
+    theme = { name, background: newTheme.background, ...tokens };
+  }
+  // A copy of the open theme carries its unsaved edits along. Anything else
+  // leaves them behind, so ask first.
+  const copyingCurrent = start === "copy" && newTheme.copyOf === state.theme;
+  if (editing() && dirty() && !copyingCurrent
+      && !confirm(`Discard your unsaved changes to ${state.theme.name}?`)) return;
+  const created = await api("/api/create", { theme, path: newTheme.path });
+  $("#new-dialog").close();
+  await openTheme(created.path);
+  toast(`Created ${name}`);
 }
 
 let catalogue = { names: [], directory: "", languages: [] };
@@ -661,46 +758,6 @@ async function refreshCatalogue() {
   }
 }
 
-async function fillThemeList() {
-  // Read the folders again every time: a theme saved since the page loaded
-  // has to show up without a refresh.
-  catalogue = await api("/api/themes");
-  const list = $("#theme-list");
-  list.replaceChildren();
-  const groups = [
-    ["canim", catalogue.names.map((name) => ({ name, at: name }))],
-    ["yours", (catalogue.workspace || []).map((t) => ({ name: t.name, at: t.path }))],
-  ];
-  for (const [label, entries] of groups) {
-    if (!entries.length) continue;
-    list.append(el("li", { className: "group-label", textContent: label }));
-    await addEntries(entries);
-  }
-}
-
-async function addEntries(entries) {
-  const list = $("#theme-list");
-  for (const { name, at } of entries) {
-    const { theme } = await api(`/api/theme?path=${encodeURIComponent(at)}`);
-    const button = el("button", { type: "button" });
-    button.append(el("span", { textContent: name }));
-    const swatches = el("span", { className: "swatches" });
-    for (const role of ["background", "keyword", "builtin", "literal", "string"]) {
-      const chip = el("i");
-      chip.style.background = theme[role];
-      swatches.append(chip);
-    }
-    button.append(swatches);
-    button.addEventListener("click", () => {
-      $("#open-dialog").close();
-      openTheme(at).catch((e) => toast(e.message));
-    });
-    const item = el("li");
-    item.append(button);
-    list.append(item);
-  }
-}
-
 // --- events -----------------------------------------------------------------
 
 document.addEventListener("click", async (event) => {
@@ -709,9 +766,9 @@ document.addEventListener("click", async (event) => {
   const mode = event.target.closest("[data-mode]")?.dataset.mode;
 
   try {
-    if (action === "open") { await fillThemeList(); $("#open-dialog").showModal(); }
+    if (action === "home") await showHome();
+    if (action === "new-from-current") openNewDialog({ copyOf: state.theme });
     if (action === "save") await save();
-    if (action === "save-as") saveAs();
     if (action === "undo") undo();
     if (action === "redo") redo();
 
@@ -785,29 +842,56 @@ $("#open-browse").addEventListener("click", async () => {
   try {
     const { path } = await api("/api/pick", { save: false });
     if (!path) return;  // cancelled
-    $("#open-dialog").close();
     await openTheme(path);
   } catch (error) { toast(error.message); }
 });
 
-$("#save-browse").addEventListener("click", async () => {
+// --- new-theme dialog events ---
+
+let pathTimer = null;
+$("#new-name").addEventListener("input", () => {
+  clearTimeout(pathTimer);
+  pathTimer = setTimeout(showNewPath, 120);
+});
+
+$("#new-background").addEventListener("click", (event) => {
+  event.preventDefault();   // inside a label: do not also toggle the radio twice
+  document.querySelector("input[name=start][value=generate]").checked = true;
+  openPicker(event.currentTarget, newTheme.background, (hex) => {
+    newTheme.background = hex;
+    $("#new-background").style.setProperty("--swatch", hex);
+  });
+});
+
+$("#new-browse").addEventListener("click", async () => {
   try {
-    const name = suggestedName();
-    const slug = name.replace(/\s+/g, "-") || "untitled";
+    const slug = $("#new-name").value.trim().replace(/\s+/g, "-") || "untitled";
     const { path } = await api("/api/pick", { save: true, suggested: `${slug}.theme.json` });
     if (!path) return;  // cancelled
-    // The copy carries the suggested name, so the file and the theme inside
-    // it agree about what it is called.
-    if (name !== state.theme.name) change((theme) => { theme.name = name; });
-    $("#save-dialog").close();
-    await save(path.endsWith(".theme.json") ? path : `${path}.theme.json`);
+    newTheme.path = path.endsWith(".theme.json") ? path : `${path}.theme.json`;
+    showNewPath();
   } catch (error) { toast(error.message); }
 });
+
+$("#new-cancel").addEventListener("click", () => $("#new-dialog").close());
+
+$("#new-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await createTheme();
+  } catch (error) {
+    $("#new-error").textContent = error.message;
+    $("#new-error").hidden = false;
+  }
+});
+
+$("#new-dialog").addEventListener("close", closePicker);
 
 document.addEventListener("keydown", (event) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(event.target.tagName);
   // The sample code is text you edit, and undo there means undo the typing.
   const ownUndo = event.target.id === "source";
+  if (!editing() || $("#new-dialog").open) return;
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && !ownUndo) {
     event.preventDefault();
     event.shiftKey ? redo() : undo();
@@ -824,7 +908,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 addEventListener("beforeunload", (event) => {
-  if (dirty()) event.preventDefault();
+  if (editing() && dirty()) event.preventDefault();
 });
 
 // --- start ------------------------------------------------------------------
@@ -832,8 +916,14 @@ addEventListener("beforeunload", (event) => {
 (async () => {
   await refreshCatalogue();
   $("#source").value = SAMPLES[$("#language").value] ?? "";
-  await openTheme(catalogue.names.includes("one-dark") ? "one-dark" : catalogue.names[0]);
-  await renderCode();
+  // Back to the theme that was open, if the URL names one; otherwise home.
+  const reopen = new URLSearchParams(location.search).get("theme");
+  try {
+    if (reopen) return await openTheme(reopen);
+  } catch (error) {
+    toast(error.message);
+  }
+  await showHome();
 })();
 
 })();

@@ -7,7 +7,7 @@ without anyone noticing.
 import pytest
 
 from canim import theme
-from canim.theme_editor.server import analyze, segments
+from canim.theme_editor.server import analyze, create_theme, filename_for, segments
 
 
 def a_theme(**overrides):
@@ -95,6 +95,39 @@ def test_derived_chrome_is_not_checked():
     # It is not in the file, so there is nothing to warn about — the value
     # follows the background by construction.
     assert "chrome_muted" not in analyze(a_theme())["contrast"]
+
+
+# --- new themes -------------------------------------------------------------
+
+
+def test_filenames_follow_the_existing_ones():
+    assert filename_for("tree frog") == "tree-frog.theme.json"
+    assert filename_for("  a/b  c ") == "a-b-c.theme.json"
+
+
+def test_a_theme_needs_a_name():
+    with pytest.raises(ValueError):
+        filename_for("   ")
+
+
+def test_create_writes_a_new_file(tmp_path):
+    path = tmp_path / "dusk.theme.json"
+    created = create_theme(a_theme(name="dusk"), path)
+    assert theme.open(path).name == "dusk"
+    assert created["background"] == "#101020"
+
+
+def test_create_never_overwrites(tmp_path):
+    path = tmp_path / "dusk.theme.json"
+    create_theme(a_theme(name="dusk"), path)
+    with pytest.raises(ValueError, match="already"):
+        create_theme(a_theme(name="dusk", background="#000000"), path)
+    assert theme.open(path).background == "#101020"
+
+
+def test_create_refuses_canims_own_folder():
+    with pytest.raises(ValueError, match="canim's own"):
+        create_theme(a_theme(name="x"), theme.THEMES_DIR / "x.theme.json")
 
 
 @pytest.mark.parametrize("name", theme.discover())
