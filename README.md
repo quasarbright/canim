@@ -569,7 +569,10 @@ directories), a **New theme** card, and canim's own themes to start from. Click
 one of yours to edit it; `← Themes` goes back. The URL names the open theme, so
 a refresh comes back to it.
 
-**New** asks for a name and a starting point: a background with every color
+The home screen's **New theme** card asks nothing: it makes `untitled` (or
+`untitled 2`, …) with one-dark's colors in your themes folder and opens it.
+
+**New** in the editor asks for a name and a starting point: a background with every color
 generated from it, or a copy of the theme you are on. It writes the file
 straight away, into the folder you last saved to (your themes folder until
 then); `change…` picks somewhere else. It never overwrites an existing file.

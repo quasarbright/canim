@@ -51,6 +51,15 @@ def filename_for(name: str) -> str:
     return stem + theme_module.SUFFIX
 
 
+def unused_name(directory: Path, name: str) -> str:
+    """`name`, or `name 2`, `name 3`… — the first with no file in `directory`."""
+    candidate, n = name, 1
+    while (directory / filename_for(candidate)).exists():
+        n += 1
+        candidate = f"{name} {n}"
+    return candidate
+
+
 def create_theme(data: dict, path: Path) -> dict:
     """Write a new theme file. Never over an existing one, never into canim's."""
     if path.parent == theme_module.THEMES_DIR:
@@ -360,6 +369,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if data.get("path"):
                     path = self._checked_path(data["path"])
                 else:
+                    if data.get("unique"):
+                        # `untitled`, then `untitled 2`, … — the first free name.
+                        data["theme"]["name"] = unused_name(start_dir(), data["theme"]["name"])
                     path = start_dir() / filename_for(data["theme"]["name"])
                 theme = create_theme(data["theme"], path)
                 return self._send({"path": str(path), "theme": theme})

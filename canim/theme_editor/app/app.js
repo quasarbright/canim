@@ -638,11 +638,21 @@ async function showHome() {
 
   const fresh = el("button", { type: "button", className: "card new" });
   fresh.append(el("b", { textContent: "+" }), el("span", { textContent: "New theme" }));
-  fresh.addEventListener("click", () => openNewDialog());
+  fresh.addEventListener("click", () => startUntitled().catch((e) => toast(e.message)));
   $("#cards-yours").replaceChildren(fresh, ...yours.map((theme, i) =>
     card(theme, () => openTheme(catalogue.workspace[i].path))));
   $("#cards-canim").replaceChildren(...canims.map((theme) =>
     card(theme, () => openNewDialog({ copyOf: theme }))));
+}
+
+/** New from the home screen: no questions, one-dark's colors, called untitled. */
+async function startUntitled() {
+  const base = catalogue.names.includes("one-dark") ? "one-dark" : catalogue.names[0];
+  const { theme } = await api(`/api/theme?path=${encodeURIComponent(base)}`);
+  const created = await api("/api/create",
+    { theme: { ...theme, name: "untitled" }, unique: true });
+  await openTheme(created.path);
+  toast(`Created ${created.theme.name}`);
 }
 
 /** A theme as a little painting of code lines in its own colors. */

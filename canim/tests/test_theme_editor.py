@@ -7,7 +7,9 @@ without anyone noticing.
 import pytest
 
 from canim import theme
-from canim.theme_editor.server import analyze, create_theme, filename_for, segments
+from canim.theme_editor.server import (
+    analyze, create_theme, filename_for, segments, unused_name,
+)
 
 
 def a_theme(**overrides):
@@ -123,6 +125,13 @@ def test_create_never_overwrites(tmp_path):
     with pytest.raises(ValueError, match="already"):
         create_theme(a_theme(name="dusk", background="#000000"), path)
     assert theme.open(path).background == "#101020"
+
+
+def test_untitled_gets_a_number_once_taken(tmp_path):
+    assert unused_name(tmp_path, "untitled") == "untitled"
+    (tmp_path / "untitled.theme.json").write_text("{}")
+    (tmp_path / "untitled-2.theme.json").write_text("{}")
+    assert unused_name(tmp_path, "untitled") == "untitled 3"
 
 
 def test_create_refuses_canims_own_folder():
