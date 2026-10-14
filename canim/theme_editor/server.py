@@ -31,6 +31,9 @@ APP = Path(__file__).parent / "app"
 # rather than making you browse to them every time.
 WORKSPACE_DIRS: list[Path] = []
 
+# The folder the last save went to, so the next file dialog opens there.
+LAST_SAVED_DIR: list[Path | None] = [None]
+
 
 def workspace_themes() -> list[dict]:
     return [
@@ -153,13 +156,25 @@ GENERATORS = {
 }
 
 
+def start_dir() -> Path:
+    """Where a file dialog opens: the folder last saved to, then your themes.
+
+    Never canim's own themes directory. Those ship with the library and are
+    not somewhere a user's theme belongs.
+    """
+    for directory in (LAST_SAVED_DIR[0], *WORKSPACE_DIRS):
+        if directory is not None and directory.is_dir():
+            return directory
+    return Path.cwd()
+
+
 def choose_file(save: bool, suggested: str = "") -> str | None:
     """A real file dialog, since a browser cannot offer a filesystem path.
 
     Shelled out to AppleScript rather than faked with a text field. Returns
     None when the dialog is cancelled, which is not an error.
     """
-    themes = str(theme_module.THEMES_DIR)
+    themes = str(start_dir())
     if save:
         script = (
             f'set d to POSIX file "{themes}" as alias\n'
@@ -257,7 +272,8 @@ class Handler(SimpleHTTPRequestHandler):
                     "names": theme_module.discover(),
                     "workspace": workspace_themes(),
                     "directory": str(theme_module.THEMES_DIR),
-                    "languages": sorted(BY_NAME),
+                    # One entry per language; `js` and `hs` are aliases.
+                    "languages": sorted({lang.name for lang in BY_NAME.values()}),
                 "harmonies": sorted(palette.HARMONY),
                 "defaults": {
                     "harmony": palette.DEFAULT_HARMONY,
@@ -308,7 +324,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send({"path": chosen})
             if url.path == "/api/theme":
                 path = self._checked_path(data["path"])
+                if path.parent == theme_module.THEMES_DIR:
+                    raise ValueError(
+                        "that is canim's own themes folder; save your theme somewhere else"
+                    )
                 theme_module.save(theme_module.from_dict(data["theme"]), path)
+                LAST_SAVED_DIR[0] = path.parent
                 return self._send({"path": str(path)})
         except (KeyError, OSError, ValueError) as error:
             return self._send({"error": str(error)}, 400)

@@ -37,12 +37,24 @@ const stateMachine = (source) => {
   }
   return { name: "VendingMachine", states: [...tree.states], count: 42 };
 };`,
+  haskell: `module Machine where
+
+-- every branch of the parser lands somewhere
+data State = Idle | Vending Int deriving (Show, Eq)
+
+step :: State -> String -> Either String State
+step Idle "coin" = Right (Vending 25)
+step (Vending n) _
+  | n >= 100  = Left "sold out"
+  | otherwise = Right (Vending (n + 25))
+step s _ = pure s`,
 };
 
 const state = {
   theme: null,
   path: null,
   saved: null,      // the JSON of the last saved state, to detect edits
+  resolved: null,   // the theme with every unpinned chrome color filled in
   analysis: { contrast: {}, warnings: {}, oklch: {} },
   compare: null,    // the theme being compared against
   mode: "side",
@@ -126,7 +138,7 @@ picker.innerHTML = `
   </div>`;
 document.body.append(picker);
 
-const pickerState = { hsv: { h: 0, s: 0, v: 0 }, onChange: null };
+const pickerState = { hsv: { h: 0, s: 0, v: 0 }, onChange: null, gesture: null };
 
 function paintPicker() {
   const hex = hsvToHex(pickerState.hsv);
@@ -144,6 +156,7 @@ function paintPicker() {
 function openPicker(anchor, value, onChange) {
   pickerState.hsv = hexToHsv(value);
   pickerState.onChange = onChange;
+  pickerState.gesture = newGesture("hex");   // typing a hex is one undo step
   picker.hidden = false;
   paintPicker();
   const box = anchor.getBoundingClientRect();
@@ -153,11 +166,16 @@ function openPicker(anchor, value, onChange) {
   picker.querySelector(".hex").focus({ preventScroll: true });
 }
 
-const closePicker = () => { picker.hidden = true; pickerState.onChange = null; };
+const closePicker = () => {
+  picker.hidden = true;
+  pickerState.onChange = null;
+  endGesture();
+};
 
 function drag(node, move) {
   node.addEventListener("pointerdown", (event) => {
     node.setPointerCapture(event.pointerId);
+    pickerState.gesture = newGesture("drag");   // the whole drag is one undo step
     const run = (e) => {
       const box = node.getBoundingClientRect();
       move((e.clientX - box.left) / box.width, (e.clientY - box.top) / box.height);
@@ -167,6 +185,8 @@ function drag(node, move) {
     const up = () => {
       node.removeEventListener("pointermove", run);
       node.removeEventListener("pointerup", up);
+      pickerState.gesture = newGesture("hex");
+      endGesture();
     };
     node.addEventListener("pointermove", run);
     node.addEventListener("pointerup", up);
@@ -209,28 +229,40 @@ async function api(path, body) {
 
 // --- history ----------------------------------------------------------------
 
-/* Every change goes through here, so undo covers generating a palette and
-   opening a preset as well as nudging one swatch. */
-function change(mutate) {
-  history.past.push(JSON.stringify(state.theme));
-  history.future.length = 0;
+/* Every change goes through here, so undo covers generating a palette as well
+   as nudging one swatch.
+
+   A gesture is one continuous action that fires many changes — a drag in the
+   picker, typing a name. All of its changes share one undo step; without this,
+   undo after a drag walks back one pointermove at a time and looks broken. */
+let gesture = null;
+let gestures = 0;
+const newGesture = (kind) => `${kind}:${++gestures}`;
+const endGesture = () => { gesture = null; };
+
+function change(mutate, during = null) {
+  if (during === null || during !== gesture) {
+    history.past.push(JSON.stringify(state.theme));
+    history.future.length = 0;
+  }
+  gesture = during;
   mutate(state.theme);
   render();
 }
 
-function undo() {
-  if (!history.past.length) return;
-  history.future.push(JSON.stringify(state.theme));
-  state.theme = JSON.parse(history.past.pop());
+function travel(from, to) {
+  if (!from.length) return;
+  // The picker is bound to the value it opened with; leaving it open after
+  // undo would let the next drag write over what undo just restored.
+  closePicker();
+  endGesture();
+  to.push(JSON.stringify(state.theme));
+  state.theme = JSON.parse(from.pop());
   render();
 }
 
-function redo() {
-  if (!history.future.length) return;
-  history.past.push(JSON.stringify(state.theme));
-  state.theme = JSON.parse(history.future.pop());
-  render();
-}
+const undo = () => travel(history.past, history.future);
+const redo = () => travel(history.future, history.past);
 
 const dirty = () => JSON.stringify(state.theme) !== state.saved;
 
@@ -320,16 +352,16 @@ function colorRow(role, { chrome = false } = {}) {
   return wrap;
 }
 
-/* What an unpinned chrome field currently resolves to. The server already
-   worked it out when it opened the theme, so this only has to read it back
-   off the rendered custom property. */
+/* What an unpinned chrome field currently resolves to, from the last time the
+   server worked the theme out. Reading it back off the painted preview instead
+   showed the previous state's value whenever the paint had not landed yet —
+   after an undo, an unpinned row could show the pinned color it used to be. */
 function derivedValue(role) {
-  const name = `--${role.replace(/_/g, "-")}`;
-  return getComputedStyle($("#pane-a .surface")).getPropertyValue(name).trim() || "#000000";
+  return state.resolved?.[`chrome_${role}`] ?? "#000000";
 }
 
 function setColor(key, value) {
-  change((theme) => { theme[key] = value; });
+  change((theme) => { theme[key] = value; }, pickerState.gesture);
 }
 
 // --- painting ---------------------------------------------------------------
@@ -385,8 +417,26 @@ function renderMath(node, theme) {
   }
 }
 
+/* Each render awaits the server, so two in flight can finish in either order.
+   Only the newest one paints; an older one landing late would put a state
+   back on screen that undo had already left. */
+let paneRun = 0;
+
 async function renderPanes() {
-  const a = await displayTheme(state.theme);
+  const run = ++paneRun;
+  const stale = () => run !== paneRun;
+
+  const full = await resolveChrome(state.theme);
+  if (stale()) return;
+  state.resolved = full;
+  $("#rows-chrome").replaceChildren(
+    ...CHROME_ROLES.map((r) => colorRow(r, { chrome: true }))
+  );
+
+  const a = await simulated(full);
+  const b = state.compare ? await displayTheme(state.compare) : null;
+  if (stale()) return;
+
   paint($("#pane-a .surface"), a);
   renderMath($("#pane-a .math"), a);
   $("#pane-a .pane-name").textContent = state.theme.name;
@@ -399,7 +449,6 @@ async function renderPanes() {
   $("#toggle-hint").hidden = !(comparing && state.mode === "toggle");
 
   if (comparing) {
-    const b = await displayTheme(state.compare);
     if (side) {
       paint($("#pane-b .surface"), b);
       renderMath($("#pane-b .math"), b);
@@ -415,7 +464,10 @@ async function renderPanes() {
 /* What to actually paint: the theme, or the theme as someone with that form
    of color blindness sees it. */
 async function displayTheme(theme) {
-  const full = await resolveChrome(theme);
+  return simulated(await resolveChrome(theme));
+}
+
+async function simulated(full) {
   if (!state.cvd) return full;
   const simulated = await api("/api/simulate", { theme: full, kind: state.cvd });
   return { ...full, ...simulated };
@@ -486,9 +538,11 @@ function renderHueMap() {
 // --- the whole view ---------------------------------------------------------
 
 let analyzeTimer = null;
+let analyzeRun = 0;
 
 function render() {
-  $("#theme-name").value = state.theme.name;
+  // Only when it differs, so typing in it does not have its caret reset.
+  if ($("#theme-name").value !== state.theme.name) $("#theme-name").value = state.theme.name;
   $("#dirty").hidden = !dirty();
   $("#builtin").hidden = !state.builtin;
 
@@ -505,9 +559,12 @@ function render() {
   // Colors are already on screen by now; the numbers can lag a frame or two
   // behind a drag without anyone noticing.
   clearTimeout(analyzeTimer);
+  const run = ++analyzeRun;
   analyzeTimer = setTimeout(async () => {
     try {
-      state.analysis = await api("/api/analyze", state.theme);
+      const analysis = await api("/api/analyze", state.theme);
+      if (run !== analyzeRun) return;   // a newer state is already being analyzed
+      state.analysis = analysis;
       $("#rows-tokens").replaceChildren(...TOKEN_ROLES.map((r) => colorRow(r)));
       $("#rows-chrome").replaceChildren(
         ...CHROME_ROLES.map((r) => colorRow(r, { chrome: true }))
@@ -583,7 +640,7 @@ async function refreshCatalogue() {
   $("#language").replaceChildren(
     ...catalogue.languages.map((name) => el("option", { value: name, textContent: name }))
   );
-  $("#language").value = catalogue.languages.includes("lisp") ? "lisp" : catalogue.languages[0];
+  $("#language").value = catalogue.languages.includes("python") ? "python" : catalogue.languages[0];
 
   $("#compare-with").replaceChildren(
     el("option", { value: "", textContent: "off" }),
@@ -605,6 +662,9 @@ async function refreshCatalogue() {
 }
 
 async function fillThemeList() {
+  // Read the folders again every time: a theme saved since the page loaded
+  // has to show up without a refresh.
+  catalogue = await api("/api/themes");
   const list = $("#theme-list");
   list.replaceChildren();
   const groups = [
@@ -673,9 +733,14 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+// The name goes through history like a color does. Setting it behind undo's
+// back meant the next undo quietly reverted it along with something else.
+let nameGesture = null;
+$("#theme-name").addEventListener("focus", () => { nameGesture = newGesture("name"); });
+$("#theme-name").addEventListener("blur", endGesture);
 $("#theme-name").addEventListener("input", (e) => {
-  state.theme.name = e.target.value;
-  $("#dirty").hidden = !dirty();
+  const name = e.target.value;
+  change((theme) => { theme.name = name; }, nameGesture);
 });
 
 $("#language").addEventListener("change", (e) => {
@@ -741,7 +806,9 @@ $("#save-browse").addEventListener("click", async () => {
 
 document.addEventListener("keydown", (event) => {
   const typing = /^(INPUT|TEXTAREA)$/.test(event.target.tagName);
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+  // The sample code is text you edit, and undo there means undo the typing.
+  const ownUndo = event.target.id === "source";
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && !ownUndo) {
     event.preventDefault();
     event.shiftKey ? redo() : undo();
   }
@@ -764,7 +831,7 @@ addEventListener("beforeunload", (event) => {
 
 (async () => {
   await refreshCatalogue();
-  $("#source").value = SAMPLES.lisp;
+  $("#source").value = SAMPLES[$("#language").value] ?? "";
   await openTheme(catalogue.names.includes("one-dark") ? "one-dark" : catalogue.names[0]);
   await renderCode();
 })();
