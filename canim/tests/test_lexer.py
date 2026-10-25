@@ -1,6 +1,6 @@
 import pytest
 
-from canim.languages import JAVASCRIPT, LISP, PYTHON, resolve
+from canim.languages import HASKELL, JAVASCRIPT, LISP, PYTHON, resolve
 from canim.lexer import Kind, lex
 
 
@@ -73,6 +73,22 @@ def test_a_prefix_belongs_to_the_string_it_introduces():
 def test_a_prefix_letter_is_only_a_prefix_next_to_a_quote():
     assert texts("format(x)", PYTHON) == ["format", "(", "x", ")"]
     assert texts("f(x)", PYTHON) == ["f", "(", "x", ")"]
+
+
+def test_a_quote_inside_a_triple_quoted_string_does_not_end_it():
+    # A docstring that quotes a word: one STRING token, not an empty string,
+    # a string, a bare identifier and another string.
+    source = 'def f():\n    """find all "good" ones\n    of p"""\n    return p'
+    toks = lex(source, PYTHON)
+    doc = [t for t in toks if t.kind is Kind.STRING]
+    assert [t.text for t in doc] == ['"""find all "good" ones\n    of p"""']
+    # positions after a string that spans lines stay right
+    ret = next(t for t in toks if t.text == "return")
+    assert (ret.line, ret.col) == (3, 4)
+
+
+def test_triple_quotes_take_a_prefix():
+    assert texts('x = f"""a "b" c"""', PYTHON) == ["x", "=", 'f"""a "b" c"""']
 
 
 def test_escaped_quote_does_not_end_the_string():
@@ -206,6 +222,50 @@ def test_javascript_comment_beats_the_divide_operator():
 
 def test_dollar_is_an_identifier_character():
     assert texts("$el = $(x)", JAVASCRIPT) == ["$el", "=", "$", "(", "x", ")"]
+
+
+# --- haskell ---------------------------------------------------------------
+
+
+def test_haskell_signature():
+    assert texts("go :: Eq a => ([a], [a]) -> ([a], [a])", HASKELL) == [
+        "go", "::", "Eq", "a", "=>", "(", "[", "a", "]", ",", "[", "a", "]", ")",
+        "->", "(", "[", "a", "]", ",", "[", "a", "]", ")",
+    ]
+    assert kind_of("go :: Eq a => a", "Eq", HASKELL) is Kind.BUILTIN
+
+
+def test_haskell_comment_beats_the_minus_operator():
+    toks = lex("x - y -- note\n", HASKELL)
+    assert [t.text for t in toks] == ["x", "-", "y", "-- note"]
+    assert toks[-1].kind is Kind.COMMENT
+
+
+def test_haskell_primes_are_part_of_the_name():
+    assert texts("go' xs'' = xs''", HASKELL) == ["go'", "xs''", "=", "xs''"]
+
+
+def test_haskell_cons_pattern_and_guard():
+    assert texts("go (l:ls, r:rs)", HASKELL) == [
+        "go", "(", "l", ":", "ls", ",", "r", ":", "rs", ")",
+    ]
+    assert kinds("| otherwise = x", HASKELL) == [
+        ("|", Kind.OPERATOR),
+        ("otherwise", Kind.BUILTIN),
+        ("=", Kind.OPERATOR),
+        ("x", Kind.IDENTIFIER),
+    ]
+
+
+def test_haskell_longest_operator_wins():
+    assert texts("m >>= f", HASKELL) == ["m", ">>=", "f"]
+    assert texts("f <$> x", HASKELL) == ["f", "<$>", "x"]
+    assert texts("a /= b", HASKELL) == ["a", "/=", "b"]
+
+
+def test_haskell_by_name():
+    assert resolve("haskell") is HASKELL
+    assert resolve("hs") is HASKELL
 
 
 def test_javascript_literals_and_builtins():

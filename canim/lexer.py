@@ -88,6 +88,9 @@ class Language:
     punctuation: str = ""
     line_comment: str | None = None
     string_delims: str = '"'
+    triple_quotes: bool = False
+    """Whether three quotes open a string that only three quotes close, as in
+    python's docstrings, so a lone quote inside one doesn't end it."""
     string_prefixes: str = ""
     """Letters that may sit in front of a quote, as in python's f"…" and rb"…".
 
@@ -116,6 +119,21 @@ def lex(source: str, language: Language) -> list[Token]:
     def emit(text: str, kind: Kind) -> None:
         tokens.append(Token(text, kind, line, col, i))
 
+    def past(end: int) -> tuple[int, int, int]:
+        """line, col and offset just after source[i:end], which may span lines."""
+        breaks = source.count("\n", i, end)
+        if not breaks:
+            return line, col + (end - i), end
+        return line + breaks, end - source.rfind("\n", i, end) - 1, end
+
+    def quote_at(at: int) -> str:
+        """The quote that opens a string at `at`: tripled where the language
+        has them and the source does."""
+        ch = source[at]
+        if language.triple_quotes and source.startswith(ch * 3, at):
+            return ch * 3
+        return ch
+
     while i < n:
         ch = source[i]
 
@@ -134,9 +152,9 @@ def lex(source: str, language: Language) -> list[Token]:
             continue
 
         if ch in language.string_delims:
-            end = _string_end(source, i, ch)
+            end = _string_end(source, i, quote_at(i))
             emit(source[i:end], Kind.STRING)
-            col, i = col + (end - i), end
+            line, col, i = past(end)
             continue
 
         # A prefixed string, before the word rule gets a chance to take the
@@ -146,9 +164,9 @@ def lex(source: str, language: Language) -> list[Token]:
             while quote < n and source[quote] in language.string_prefixes:
                 quote += 1
             if quote < n and source[quote] in language.string_delims:
-                end = _string_end(source, quote, source[quote])
+                end = _string_end(source, quote, quote_at(quote))
                 emit(source[i:end], Kind.STRING)
-                col, i = col + (end - i), end
+                line, col, i = past(end)
                 continue
 
         operator = next(
@@ -193,14 +211,15 @@ def lex(source: str, language: Language) -> list[Token]:
 
 
 def _string_end(source: str, start: int, quote: str) -> int:
-    """Offset just past the closing quote, or end of source if never closed."""
-    i = start + 1
+    """Offset just past the closing quote, or end of source if never closed.
+    `quote` may be several characters, as a python triple quote is."""
+    i = start + len(quote)
     while i < len(source):
         if source[i] == "\\":
             i += 2
             continue
-        if source[i] == quote:
-            return i + 1
+        if source.startswith(quote, i):
+            return i + len(quote)
         i += 1
     return len(source)
 

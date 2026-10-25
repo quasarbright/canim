@@ -85,6 +85,7 @@ PYTHON = Language(
     punctuation=",:.;",
     line_comment="#",
     string_delims="\"'",
+    triple_quotes=True,
     string_prefixes="fFrRbBuU",
 )
 
@@ -128,7 +129,53 @@ JAVASCRIPT = Language(
     string_delims="\"'`",
 )
 
-BY_NAME = {"lisp": LISP, "python": PYTHON, "javascript": JAVASCRIPT, "js": JAVASCRIPT}
+# A haskell identifier may carry primes (`go'`, `xs''`), so the apostrophe is
+# a word character and there are no char literals: `'a'` would need context to
+# tell from a primed name, and nothing here gets context.
+HASKELL = Language(
+    name="haskell",
+    word=re.compile(r"[A-Za-z_][A-Za-z0-9_']*|\d+\.?\d*"),
+    number=re.compile(r"\d+\.?\d*"),
+    keywords=frozenset(
+        {
+            "module", "import", "qualified", "as", "hiding", "where",
+            "let", "in", "case", "of", "if", "then", "else", "do",
+            "data", "type", "newtype", "class", "instance", "deriving",
+            "forall", "infixl", "infixr", "infix",
+        }
+    ),
+    builtins=frozenset(
+        {
+            "Eq", "Ord", "Show", "Read", "Num", "Integral", "Fractional",
+            "Functor", "Applicative", "Monad", "Foldable", "Traversable",
+            "Semigroup", "Monoid", "Int", "Integer", "Double", "Float", "Char",
+            "String", "Bool", "Maybe", "Either", "IO",
+            "map", "filter", "foldr", "foldl", "zip", "zipWith", "head", "tail",
+            "length", "reverse", "fst", "snd", "concat", "concatMap", "show",
+            "read", "print", "putStrLn", "return", "pure", "fmap", "mapM_",
+            "otherwise", "not", "error", "id", "const", "flip",
+        }
+    ),
+    literals=frozenset({"True", "False", "Nothing", "Just", "Left", "Right"}),
+    delimiters={"(": ")", "[": "]", "{": "}"},
+    # Longest first: >>= before >>, <$> before <, :: before :.
+    operators=(
+        ">>=", "<$>", "<*>", "<|>",
+        "::", "=>", "->", "<-", "==", "/=", "<=", ">=", "++", "&&", "||", ">>",
+        "=", "|", "&", ":", "$", ".", "\\", "+", "-", "*", "/", "<", ">", "@", "~", "!",
+    ),
+    punctuation=",;",
+    line_comment="--",
+)
+
+BY_NAME = {
+    "lisp": LISP,
+    "python": PYTHON,
+    "javascript": JAVASCRIPT,
+    "js": JAVASCRIPT,
+    "haskell": HASKELL,
+    "hs": HASKELL,
+}
 
 
 def resolve(language: Language | str) -> Language:
