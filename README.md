@@ -662,6 +662,13 @@ transfer for the RGB it was converted from. Tagging BT.709 — the obvious guess
 for HD — makes the colors *worse*. Tagging only changes what the file
 declares, not what is encoded.
 
+**For upload, retag the transfer as BT.709.** YouTube honors the sRGB transfer
+tag by converting to BT.709's curve, which darkens shadows (`#022C26` played
+back as `#001B15`). The tags here are right for local players; a delivery file
+should carry `transfer_characteristics=1`, which `ffmpeg -c copy -bsf:v
+h264_metadata=transfer_characteristics=1` sets without touching the pixels.
+manim-videos' `narration` mastering does this.
+
 To check a file:
 
 ```sh
